@@ -3,6 +3,7 @@ package br.com.vrinteriorpaulista.validator_infra.entity;
 import br.com.vrinteriorpaulista.validator_infra.enums.StatusLevantamento;
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import jakarta.persistence.*;
+import org.hibernate.annotations.SQLRestriction;
 import lombok.Getter;
 import lombok.Setter;
 
@@ -12,6 +13,7 @@ import java.util.List;
 
 @Entity
 @Table(name = "levantamento")
+@SQLRestriction("excluido_em is null")
 @Getter
 @Setter
 public class Levantamento {
@@ -57,6 +59,15 @@ public class Levantamento {
     @Column(name = "atualizado_em")
     private LocalDateTime atualizadoEm;
 
+    /** Soft delete (só ADMIN). Registros arquivados somem de todas as consultas via @SQLRestriction. */
+    @Column(name = "excluido_em")
+    private LocalDateTime excluidoEm;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "excluido_por_id")
+    @JsonIgnore
+    private Usuario excluidoPor;
+
     @OneToMany(mappedBy = "levantamento", cascade = CascadeType.ALL, orphanRemoval = true)
     private List<Equipamento> equipamentos = new ArrayList<>();
 
@@ -76,5 +87,10 @@ public class Levantamento {
      */
     public boolean isEditavel() {
         return status == StatusLevantamento.RASCUNHO || status == StatusLevantamento.EM_ANALISE;
+    }
+
+    public void arquivar(Usuario usuario) {
+        this.excluidoEm = LocalDateTime.now();
+        this.excluidoPor = usuario;
     }
 }

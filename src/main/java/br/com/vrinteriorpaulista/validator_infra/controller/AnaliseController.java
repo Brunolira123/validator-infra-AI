@@ -12,6 +12,7 @@ import jakarta.validation.Valid;
 import org.springframework.core.io.Resource;
 import org.springframework.http.ContentDisposition;
 import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -40,6 +41,14 @@ public class AnaliseController {
     public FotoResponse uploadFoto(@PathVariable Long id,
                                    @RequestParam("foto") MultipartFile foto) {
         return FotoResponse.from(service.uploadFoto(id, foto));
+    }
+
+    @PreAuthorize("hasRole('ADMIN')")
+    @Operation(summary = "Arquiva (soft delete) uma foto", description = "Só com o levantamento em RASCUNHO ou EM_ANALISE (409 caso contrário). O arquivo continua no disco; a foto some da listagem e da próxima análise.")
+    @DeleteMapping("/{id}/fotos/{fotoId}")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void arquivarFoto(@PathVariable Long id, @PathVariable Long fotoId) {
+        service.arquivarFoto(id, fotoId);
     }
 
     @PreAuthorize("hasAnyRole('ADMIN', 'COMERCIAL', 'TECNICO')")

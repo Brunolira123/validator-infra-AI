@@ -10,6 +10,7 @@ import br.com.vrinteriorpaulista.validator_infra.service.RelatorioService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
+import org.springframework.http.HttpStatus;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
@@ -70,6 +71,14 @@ public class LevantamentoController {
     @PostMapping("/{id}/reabrir")
     public LevantamentoResponse reabrir(@PathVariable Long id) {
         return LevantamentoResponse.from(service.reabrir(id));
+    }
+
+    @PreAuthorize("hasRole('ADMIN')")
+    @Operation(summary = "Arquiva (soft delete) um levantamento", description = "Qualquer status. Equipamentos, fotos e análises continuam no banco, mas o levantamento some das consultas (404).")
+    @DeleteMapping("/{id}")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void arquivar(@PathVariable Long id) {
+        service.arquivar(id);
     }
 
     @Operation(summary = "Busca um levantamento pelo id")

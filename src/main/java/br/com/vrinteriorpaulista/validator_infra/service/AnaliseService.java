@@ -114,7 +114,7 @@ public class AnaliseService {
         Path destino = salvarArquivo(equipamentoId, extensao, file);
 
         try {
-            int seq = fotoRepo.findByEquipamentoIdOrderBySequenciaAsc(equipamentoId).size() + 1;
+            int seq = fotoRepo.maiorSequenciaIncluindoArquivadas(equipamentoId) + 1;
             Foto foto = new Foto();
             foto.setEquipamento(eq);
             foto.setUsuario(user);
@@ -128,6 +128,24 @@ public class AnaliseService {
             apagarArquivo(destino);
             throw e;
         }
+    }
+
+    /**
+     * Soft delete da foto: some da listagem e da próxima análise, mas o arquivo fica no disco.
+     * Só com o levantamento editável: em levantamento concluído/cancelado a foto é evidência.
+     */
+    @Transactional
+    public void arquivarFoto(Long equipamentoId, Long fotoId) {
+        Equipamento eq = buscarEquipamento(equipamentoId);
+        validarLevantamentoEditavel(eq.getLevantamento());
+
+        Foto foto = fotoRepo.findById(fotoId)
+                .filter(f -> f.getEquipamento().getId().equals(equipamentoId))
+                .orElseThrow(() -> new EntityNotFoundException("Foto não encontrada"));
+        Usuario user = usuarioLogado.usuario();
+        foto.arquivar(user);
+        fotoRepo.save(foto);
+        log.info("Foto {} do equipamento {} arquivada por {}", fotoId, equipamentoId, user.getLogin());
     }
 
     private Path salvarArquivo(Long equipamentoId, String extensao, MultipartFile file) {

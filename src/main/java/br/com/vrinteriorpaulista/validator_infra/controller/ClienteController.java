@@ -8,6 +8,7 @@ import br.com.vrinteriorpaulista.validator_infra.service.ClienteService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
+import org.springframework.http.HttpStatus;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
@@ -41,6 +42,14 @@ public class ClienteController {
     @GetMapping("/{id}")
     public ClienteResponse buscar(@PathVariable Long id) {
         return ClienteResponse.from(service.buscar(id));
+    }
+
+    @PreAuthorize("hasRole('ADMIN')")
+    @Operation(summary = "Arquiva (soft delete) um cliente", description = "Arquiva também os levantamentos ativos dele. Nada é apagado do banco nem do disco. Recadastrar o mesmo CNPJ reativa o registro.")
+    @DeleteMapping("/{id}")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void arquivar(@PathVariable Long id) {
+        service.arquivar(id);
     }
 
     @Operation(summary = "Consulta CNPJ na Receita para autocompletar o cadastro", description = "Envie o CNPJ sem a barra (/). Retorna 404 se o CNPJ não existir na Receita e 503 se a BrasilAPI estiver indisponível.")

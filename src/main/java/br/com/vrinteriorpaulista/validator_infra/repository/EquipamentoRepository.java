@@ -19,7 +19,7 @@ public interface EquipamentoRepository extends JpaRepository<Equipamento, Long> 
             select new br.com.vrinteriorpaulista.validator_infra.dto.response.EquipamentoResponse(
                 e.id, e.categoria, e.funcao, e.sequencia, e.status, count(f))
             from Equipamento e
-            left join e.fotos f
+            left join e.fotos f on f.excluidoEm is null
             where e.levantamento.id = :levantamentoId
             group by e.id, e.categoria, e.funcao, e.sequencia, e.status
             order by e.sequencia

@@ -201,6 +201,14 @@ public class LevantamentoService {
         return equipamentoRepo.listarComQtdFotos(levantamentoId);
     }
 
+    /** Soft delete. Qualquer status: o registro continua no banco e pode ser recuperado. */
+    @Transactional
+    public void arquivar(Long id) {
+        Levantamento l = buscar(id);
+        l.arquivar(usuarioLogado.usuario());
+        levantamentoRepo.save(l);
+    }
+
     public Levantamento buscar(Long id) {
         return levantamentoRepo.findById(id)
                 .orElseThrow(() -> new EntityNotFoundException("Levantamento não encontrado"));

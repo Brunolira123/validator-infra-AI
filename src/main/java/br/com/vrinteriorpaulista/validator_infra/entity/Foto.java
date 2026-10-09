@@ -2,6 +2,7 @@ package br.com.vrinteriorpaulista.validator_infra.entity;
 
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import jakarta.persistence.*;
+import org.hibernate.annotations.SQLRestriction;
 import lombok.Getter;
 import lombok.Setter;
 
@@ -9,6 +10,7 @@ import java.time.LocalDateTime;
 
 @Entity
 @Table(name = "foto")
+@SQLRestriction("excluido_em is null")
 @Getter
 @Setter
 public class Foto {
@@ -47,8 +49,22 @@ public class Foto {
     @Column(name = "criado_em", nullable = false, updatable = false)
     private LocalDateTime criadoEm;
 
+    /** Soft delete (só ADMIN). Registros arquivados somem de todas as consultas via @SQLRestriction. */
+    @Column(name = "excluido_em")
+    private LocalDateTime excluidoEm;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "excluido_por_id")
+    @JsonIgnore
+    private Usuario excluidoPor;
+
     @PrePersist
     public void prePersist() {
         this.criadoEm = LocalDateTime.now();
+    }
+
+    public void arquivar(Usuario usuario) {
+        this.excluidoEm = LocalDateTime.now();
+        this.excluidoPor = usuario;
     }
 }

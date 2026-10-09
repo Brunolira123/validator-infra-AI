@@ -1,10 +1,13 @@
 package br.com.vrinteriorpaulista.validator_infra.repository;
 
 import br.com.vrinteriorpaulista.validator_infra.entity.Levantamento;
+import br.com.vrinteriorpaulista.validator_infra.entity.Usuario;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
 
@@ -30,6 +33,16 @@ public interface LevantamentoRepository extends JpaRepository<Levantamento, Long
     List<Levantamento> findAllOrderByCriadoEmDesc();
 
     List<Levantamento> findByUsuarioIdOrderByCriadoEmDesc(Long usuarioId);
+
+    /** Arquiva os levantamentos ativos do cliente junto com ele (mesmo timestamp, para auditoria). */
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
+    @Query("""
+            update Levantamento l set l.excluidoEm = :quando, l.excluidoPor = :usuario
+            where l.cliente.id = :clienteId and l.excluidoEm is null
+            """)
+    int arquivarPorCliente(@Param("clienteId") Long clienteId,
+                           @Param("quando") LocalDateTime quando,
+                           @Param("usuario") Usuario usuario);
 
     /**
      * Carrega levantamento, cliente, usuário, equipamentos e análises numa única query (relatório sem N+1).
