@@ -4,27 +4,26 @@ import br.com.vrinteriorpaulista.validator_infra.dto.response.RelatorioLevantame
 import br.com.vrinteriorpaulista.validator_infra.entity.Analise;
 import br.com.vrinteriorpaulista.validator_infra.entity.Equipamento;
 import br.com.vrinteriorpaulista.validator_infra.entity.Levantamento;
-import br.com.vrinteriorpaulista.validator_infra.repository.AnaliseRepository;
 import br.com.vrinteriorpaulista.validator_infra.repository.LevantamentoRepository;
 import jakarta.persistence.EntityNotFoundException;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
+import java.util.ArrayList;
 import java.util.List;
 
 @Service
 public class RelatorioService {
 
     private final LevantamentoRepository levantamentoRepo;
-    private final AnaliseRepository analiseRepo;
 
-    public RelatorioService(LevantamentoRepository levantamentoRepo,
-                            AnaliseRepository analiseRepo) {
+    public RelatorioService(LevantamentoRepository levantamentoRepo) {
         this.levantamentoRepo = levantamentoRepo;
-        this.analiseRepo = analiseRepo;
     }
 
+    @Transactional(readOnly = true)
     public RelatorioLevantamentoDTO gerar(Long levantamentoId) {
-        Levantamento l = levantamentoRepo.findById(levantamentoId)
+        Levantamento l = levantamentoRepo.findByIdComEquipamentosEAnalises(levantamentoId)
                 .orElseThrow(() -> new EntityNotFoundException("Levantamento não encontrado"));
 
         var resumoDim = new RelatorioLevantamentoDTO.ResumoDimensionamento(
@@ -33,10 +32,10 @@ public class RelatorioService {
         );
 
         int atende = 0, naoAtende = 0, requerAnalise = 0, pendente = 0;
-        List<RelatorioLevantamentoDTO.EquipamentoDetalhe> detalhes = new java.util.ArrayList<>();
+        List<RelatorioLevantamentoDTO.EquipamentoDetalhe> detalhes = new ArrayList<>();
 
         for (Equipamento e : l.getEquipamentos()) {
-            Analise a = analiseRepo.findByEquipamentoId(e.getId()).orElse(null);
+            Analise a = e.getAnalise();
 
             switch (e.getStatus()) {
                 case ATENDE -> atende++;

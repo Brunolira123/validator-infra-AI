@@ -6,6 +6,8 @@ import br.com.vrinteriorpaulista.validator_infra.enums.CategoriaEquipamento;
 import br.com.vrinteriorpaulista.validator_infra.enums.FuncaoEquipamento;
 import br.com.vrinteriorpaulista.validator_infra.service.MotorRegrasService;
 import br.com.vrinteriorpaulista.validator_infra.service.vision.VisionProvider;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import org.springframework.http.MediaType;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
@@ -14,6 +16,7 @@ import java.io.IOException;
 import java.io.UncheckedIOException;
 
 @RestController
+@Tag(name = "Testes (uso interno)")
 @RequestMapping("/api/motor")
 public class MotorRegrasTesteController {
 
@@ -26,6 +29,7 @@ public class MotorRegrasTesteController {
         this.motorRegras = motorRegras;
     }
 
+    @Operation(summary = "Extrai as especificações e avalia no motor de regras sem persistir")
     @PostMapping(value = "/avaliar", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public ResultadoAnaliseDTO avaliar(
             @RequestParam("foto") MultipartFile foto,
