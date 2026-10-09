@@ -1,6 +1,7 @@
 package br.com.vrinteriorpaulista.validator_infra.controller;
 
 import br.com.vrinteriorpaulista.validator_infra.dto.request.RevisaoAnaliseRequest;
+import br.com.vrinteriorpaulista.validator_infra.dto.response.AnaliseResponse;
 import br.com.vrinteriorpaulista.validator_infra.dto.response.FotoResponse;
 import br.com.vrinteriorpaulista.validator_infra.dto.response.ResultadoAnaliseDTO;
 import br.com.vrinteriorpaulista.validator_infra.service.AnaliseService;
@@ -69,6 +70,15 @@ public class AnaliseController {
     @PostMapping("/{id}/analisar")
     public ResultadoAnaliseDTO analisar(@PathVariable Long id) {
         return service.analisarEquipamento(id);
+    }
+
+    @PreAuthorize("hasAnyRole('ADMIN', 'COMERCIAL', 'TECNICO')")
+    @Operation(summary = "Busca a análise persistida do equipamento", description = "Retorna 204 se o equipamento ainda não foi analisado e 404 se não existir.")
+    @GetMapping("/{id}/analise")
+    public ResponseEntity<AnaliseResponse> buscarAnalise(@PathVariable Long id) {
+        return service.buscarAnalise(id)
+                .map(ResponseEntity::ok)
+                .orElseGet(() -> ResponseEntity.noContent().build());
     }
 
     @PreAuthorize("hasAnyRole('TECNICO', 'ADMIN')")

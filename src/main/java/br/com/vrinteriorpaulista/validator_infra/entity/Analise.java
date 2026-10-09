@@ -72,6 +72,10 @@ public class Analise {
     private String jsonIaCorrigido;
 
     // ---- Resultado do motor de regras ----
+    // Itens avaliados (List<ItemAvaliadoDTO>) serializados, para reexibir a análise sem reprocessar.
+    @Column(name = "json_itens", columnDefinition = "TEXT")
+    private String jsonItens;
+
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 20)
     private StatusAnalise resultado = StatusAnalise.PENDENTE;

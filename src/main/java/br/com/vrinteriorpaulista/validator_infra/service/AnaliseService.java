@@ -1,7 +1,9 @@
 package br.com.vrinteriorpaulista.validator_infra.service;
 
 import br.com.vrinteriorpaulista.validator_infra.dto.request.RevisaoAnaliseRequest;
+import br.com.vrinteriorpaulista.validator_infra.dto.response.AnaliseResponse;
 import br.com.vrinteriorpaulista.validator_infra.dto.response.ResultadoAnaliseDTO;
+import br.com.vrinteriorpaulista.validator_infra.dto.response.ResultadoAnaliseDTO.ItemAvaliadoDTO;
 import br.com.vrinteriorpaulista.validator_infra.dto.vision.AnaliseEquipamentoDTO;
 import br.com.vrinteriorpaulista.validator_infra.dto.vision.ArmazenamentoExtraido;
 import br.com.vrinteriorpaulista.validator_infra.dto.vision.CampoExtraido;
@@ -19,6 +21,7 @@ import br.com.vrinteriorpaulista.validator_infra.repository.UsuarioRepository;
 import br.com.vrinteriorpaulista.validator_infra.service.vision.VisionProvider;
 import jakarta.persistence.EntityNotFoundException;
 import lombok.extern.slf4j.Slf4j;
+import tools.jackson.core.type.TypeReference;
 import tools.jackson.databind.ObjectMapper;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
@@ -39,6 +42,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.UUID;
 
 @Service
@@ -183,6 +187,7 @@ public class AnaliseService {
         ResultadoAnaliseDTO resultado = motorRegras.avaliar(corrigido, eq.getCategoria(), eq.getFuncao());
 
         analise.setJsonIaCorrigido(objectMapper.writeValueAsString(corrigido));
+        analise.setJsonItens(objectMapper.writeValueAsString(resultado.itens()));
         analise.setResultado(resultado.resultado());
         analise.setJustificativa(resultado.justificativa());
         analise.setAnalisadoPor(revisor);
@@ -194,6 +199,35 @@ public class AnaliseService {
         equipamentoRepo.save(eq);
 
         return resultado;
+    }
+
+    /**
+     * Análise persistida do equipamento, ou vazio se ainda não foi analisado.
+     * Análises gravadas antes da coluna json_itens voltam com a lista de itens vazia.
+     */
+    @Transactional(readOnly = true)
+    public Optional<AnaliseResponse> buscarAnalise(Long equipamentoId) {
+        buscarEquipamento(equipamentoId);
+        return analiseRepo.findByEquipamentoId(equipamentoId).map(a -> new AnaliseResponse(
+                a.getResultado(),
+                a.getJustificativa(),
+                itens(a.getJsonItens()),
+                a.getFabricante(),
+                a.getModelo(),
+                a.getCpuModelo(),
+                a.getCpuGeracao(),
+                a.getRamGb(),
+                a.getSoNome(),
+                a.getConfiancaGlobal(),
+                a.getAnalisadoEm(),
+                a.getAnalisadoPor() != null ? a.getAnalisadoPor().getNome() : null,
+                a.getJsonIaCorrigido() != null
+        ));
+    }
+
+    private List<ItemAvaliadoDTO> itens(String json) {
+        if (json == null) return List.of();
+        return objectMapper.readValue(json, new TypeReference<List<ItemAvaliadoDTO>>() {});
     }
 
     private void aplicarRevisao(Analise analise, RevisaoAnaliseRequest req) {
@@ -294,6 +328,7 @@ public class AnaliseService {
         analise.setConfiancaGlobal(dadosIa.confianca_global());
         analise.setJsonIa(objectMapper.writeValueAsString(dadosIa));
         analise.setJsonIaCorrigido(null);
+        analise.setJsonItens(objectMapper.writeValueAsString(resultado.itens()));
         analise.setResultado(resultado.resultado());
         analise.setJustificativa(resultado.justificativa());
         analise.setAnalisadoPor(user);
