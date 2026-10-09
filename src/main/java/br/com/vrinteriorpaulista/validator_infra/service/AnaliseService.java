@@ -11,6 +11,7 @@ import br.com.vrinteriorpaulista.validator_infra.dto.vision.SistemaOperacionalEx
 import br.com.vrinteriorpaulista.validator_infra.entity.*;
 import br.com.vrinteriorpaulista.validator_infra.enums.CategoriaEquipamento;
 import br.com.vrinteriorpaulista.validator_infra.enums.FuncaoEquipamento;
+import br.com.vrinteriorpaulista.validator_infra.enums.StatusLevantamento;
 import br.com.vrinteriorpaulista.validator_infra.repository.AnaliseRepository;
 import br.com.vrinteriorpaulista.validator_infra.repository.EquipamentoRepository;
 import br.com.vrinteriorpaulista.validator_infra.repository.FotoRepository;
@@ -103,6 +104,7 @@ public class AnaliseService {
         }
 
         Equipamento eq = buscarEquipamento(equipamentoId);
+        validarLevantamentoEditavel(eq.getLevantamento());
         Usuario user = usuarioLogado.usuario();
 
         Path destino = salvarArquivo(equipamentoId, extensao, file);
@@ -169,6 +171,7 @@ public class AnaliseService {
     @Transactional
     public ResultadoAnaliseDTO revisarAnalise(Long equipamentoId, RevisaoAnaliseRequest req) {
         Equipamento eq = buscarEquipamento(equipamentoId);
+        validarLevantamentoEmAnalise(eq.getLevantamento());
         Analise analise = analiseRepo.findByEquipamentoId(equipamentoId)
                 .orElseThrow(() -> new EntityNotFoundException(
                         "Análise não encontrada. Execute a análise inicial primeiro."));
@@ -240,6 +243,7 @@ public class AnaliseService {
 
     private DadosParaAnalise carregarDadosParaAnalise(Long equipamentoId, Long usuarioId) {
         Equipamento eq = buscarEquipamento(equipamentoId);
+        validarLevantamentoEditavel(eq.getLevantamento());
         buscarUsuario(usuarioId);
 
         var fotos = fotoRepo.findByEquipamentoIdOrderBySequenciaAsc(equipamentoId);
@@ -261,6 +265,7 @@ public class AnaliseService {
                                   AnaliseEquipamentoDTO dadosIa,
                                   ResultadoAnaliseDTO resultado) {
         Equipamento eq = buscarEquipamento(equipamentoId);
+        validarLevantamentoEditavel(eq.getLevantamento());
         Usuario user = buscarUsuario(usuarioId);
 
         Analise analise = analiseRepo.findByEquipamentoId(equipamentoId).orElse(new Analise());
@@ -298,6 +303,28 @@ public class AnaliseService {
 
         eq.setStatus(resultado.resultado());
         equipamentoRepo.save(eq);
+    }
+
+    /**
+     * Upload e análise: RASCUNHO ou EM_ANALISE.
+     */
+    private void validarLevantamentoEditavel(Levantamento l) {
+        if (!l.isEditavel()) {
+            throw new IllegalStateException(mensagemNaoEmAnalise(l));
+        }
+    }
+
+    /**
+     * Revisão: só EM_ANALISE.
+     */
+    private void validarLevantamentoEmAnalise(Levantamento l) {
+        if (l.getStatus() != StatusLevantamento.EM_ANALISE) {
+            throw new IllegalStateException(mensagemNaoEmAnalise(l));
+        }
+    }
+
+    private String mensagemNaoEmAnalise(Levantamento l) {
+        return "Levantamento não está em análise (status atual: " + l.getStatus() + ")";
     }
 
     private Equipamento buscarEquipamento(Long id) {

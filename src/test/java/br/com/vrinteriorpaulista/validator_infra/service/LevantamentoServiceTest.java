@@ -24,6 +24,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -49,6 +50,55 @@ class LevantamentoServiceTest {
     void setUp() {
         service = new LevantamentoService(levantamentoRepo, clienteRepo, equipamentoRepo, usuarioLogado);
         lenient().when(levantamentoRepo.save(any())).thenAnswer(inv -> inv.getArgument(0));
+    }
+
+    @Nested
+    class GerarEquipamentos {
+
+        @Test
+        void deveGerarEquipamentosEMudarParaEmAnaliseQuandoEstiverEmRascunho() {
+            Levantamento l = dadoLevantamento(StatusLevantamento.RASCUNHO);
+            l.setQtdServidores(1);
+            l.setQtdPdvs(2);
+            l.setQtdRetaguardas(0);
+            l.setConsultaPreco(false);
+
+            Levantamento resultado = service.gerarEquipamentos(ID);
+
+            assertThat(resultado.getStatus()).isEqualTo(StatusLevantamento.EM_ANALISE);
+            assertThat(resultado.getEquipamentos())
+                    .extracting(Equipamento::getSequencia)
+                    .containsExactly(1, 2, 3);
+        }
+
+        @Test
+        void deveRetornar409QuandoEstiverEmAnalise() {
+            dadoLevantamento(StatusLevantamento.EM_ANALISE);
+
+            assertThatThrownBy(() -> service.gerarEquipamentos(ID))
+                    .isInstanceOf(IllegalStateException.class)
+                    .hasMessage("Levantamento não está em rascunho (status atual: EM_ANALISE)");
+            verifyNoInteractions(equipamentoRepo);
+        }
+
+        @Test
+        void deveRetornar409QuandoEstiverConcluido() {
+            dadoLevantamento(StatusLevantamento.CONCLUIDO);
+
+            assertThatThrownBy(() -> service.gerarEquipamentos(ID))
+                    .isInstanceOf(IllegalStateException.class)
+                    .hasMessage("Levantamento não está em rascunho (status atual: CONCLUIDO)");
+        }
+
+        @Test
+        void deveRetornar409QuandoEstiverCancelado() {
+            dadoLevantamento(StatusLevantamento.CANCELADO);
+
+            assertThatThrownBy(() -> service.gerarEquipamentos(ID))
+                    .isInstanceOf(IllegalStateException.class)
+                    .hasMessage("Levantamento não está em rascunho (status atual: CANCELADO)");
+            verify(levantamentoRepo, never()).save(any());
+        }
     }
 
     @Nested

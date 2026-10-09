@@ -70,4 +70,11 @@ public class Levantamento {
     public void preUpdate() {
         this.atualizadoEm = LocalDateTime.now();
     }
+
+    /**
+     * Aceita fotos e análises: RASCUNHO ou EM_ANALISE. CONCLUIDO e CANCELADO são somente leitura.
+     */
+    public boolean isEditavel() {
+        return status == StatusLevantamento.RASCUNHO || status == StatusLevantamento.EM_ANALISE;
+    }
 }

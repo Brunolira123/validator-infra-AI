@@ -58,6 +58,9 @@ public class LevantamentoService {
     public Levantamento gerarEquipamentos(Long levantamentoId) {
         Levantamento l = buscar(levantamentoId);
 
+        if (l.getStatus() != StatusLevantamento.RASCUNHO) {
+            throw new IllegalStateException("Levantamento não está em rascunho (status atual: " + l.getStatus() + ")");
+        }
         if (!l.getEquipamentos().isEmpty()) {
             throw new IllegalStateException("Levantamento já possui equipamentos gerados");
         }
