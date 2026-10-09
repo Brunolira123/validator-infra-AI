@@ -49,6 +49,20 @@ public class LevantamentoController {
         return LevantamentoResponse.from(service.concluir(id));
     }
 
+    @PreAuthorize("hasAnyRole('COMERCIAL', 'ADMIN')")
+    @Operation(summary = "Cancela o levantamento", description = "Retorna 409 se o levantamento estiver concluído. Cancelar um levantamento já cancelado não tem efeito.")
+    @PostMapping("/{id}/cancelar")
+    public LevantamentoResponse cancelar(@PathVariable Long id) {
+        return LevantamentoResponse.from(service.cancelar(id));
+    }
+
+    @PreAuthorize("hasAnyRole('COMERCIAL', 'TECNICO', 'ADMIN')")
+    @Operation(summary = "Reabre um levantamento concluído", description = "Volta o status para EM_ANALISE. Retorna 409 se o levantamento não estiver concluído.")
+    @PostMapping("/{id}/reabrir")
+    public LevantamentoResponse reabrir(@PathVariable Long id) {
+        return LevantamentoResponse.from(service.reabrir(id));
+    }
+
     @Operation(summary = "Busca um levantamento pelo id")
     @GetMapping("/{id}")
     public LevantamentoResponse buscar(@PathVariable Long id) {

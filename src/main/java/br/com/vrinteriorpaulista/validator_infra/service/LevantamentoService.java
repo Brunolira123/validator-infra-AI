@@ -126,6 +126,34 @@ public class LevantamentoService {
         return levantamentoRepo.save(l);
     }
 
+    @Transactional
+    public Levantamento cancelar(Long levantamentoId) {
+        Levantamento l = buscar(levantamentoId);
+
+        if (l.getStatus() == StatusLevantamento.CANCELADO) {
+            return l;
+        }
+        if (l.getStatus() == StatusLevantamento.CONCLUIDO) {
+            throw new IllegalStateException("Levantamento concluído não pode ser cancelado. Reabra-o primeiro.");
+        }
+
+        l.setStatus(StatusLevantamento.CANCELADO);
+        return levantamentoRepo.save(l);
+    }
+
+    @Transactional
+    public Levantamento reabrir(Long levantamentoId) {
+        Levantamento l = buscar(levantamentoId);
+
+        if (l.getStatus() != StatusLevantamento.CONCLUIDO) {
+            throw new IllegalStateException("Só é possível reabrir levantamento concluído (status atual: "
+                    + l.getStatus() + ")");
+        }
+
+        l.setStatus(StatusLevantamento.EM_ANALISE);
+        return levantamentoRepo.save(l);
+    }
+
     private FuncaoEquipamento definirFuncaoServidor(int indice, int total) {
         if (total == 1) return FuncaoEquipamento.APLICACAO; // servidor único = tudo
         if (total == 2) return indice == 1 ? FuncaoEquipamento.BANCO_DADOS : FuncaoEquipamento.APLICACAO;
