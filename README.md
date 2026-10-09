@@ -86,7 +86,7 @@ Use o `token` retornado no header `Authorization: Bearer <token>` nas demais rot
 ```
 
 - **Testes unitários** (motor de regras e regras do levantamento): Mockito puro, sem banco.
-- **Testes de integração** (`@IntegrationTest`): sobem a aplicação inteira contra um PostgreSQL 16 real e descartável via Testcontainers. Um único container é compartilhado pela suíte e removido ao final.
+- **Testes de integração** (`@IntegrationTest`): sobem a aplicação inteira contra um PostgreSQL 14 real e descartável via Testcontainers (mesma versão do Compose e do banco local). Um único container é compartilhado pela suíte e removido ao final.
   - **Exigem Docker rodando.** Sem Docker, falham com erro explícito do Testcontainers; não são ignorados.
   - Não usam o banco local, o `.env` nem a API de IA: a chave da IA e o segredo JWT de teste estão em `src/test/resources/application-test.properties`, e a IA é mockada onde é chamada.
-  - A primeira execução baixa a imagem `postgres:16-alpine`; as seguintes levam cerca de 1 minuto.
+  - A primeira execução baixa a imagem `postgres:14-alpine` (se ainda não estiver no cache do Docker); as seguintes levam cerca de 1 minuto.

@@ -16,7 +16,7 @@ public class TestcontainersConfig {
      * Estático para a suíte inteira usar um único container, mesmo quando classes de teste geram
      * contextos Spring diferentes (ex: uma com @MockitoBean e outra sem).
      */
-    private static final PostgreSQLContainer POSTGRES = new PostgreSQLContainer("postgres:16-alpine");
+    private static final PostgreSQLContainer POSTGRES = new PostgreSQLContainer("postgres:14-alpine");
 
     @Bean
     @ServiceConnection
