@@ -1,5 +1,6 @@
 package br.com.vrinteriorpaulista.validator_infra.controller;
 
+import br.com.vrinteriorpaulista.validator_infra.config.IntegrationTest;
 import br.com.vrinteriorpaulista.validator_infra.entity.Usuario;
 import br.com.vrinteriorpaulista.validator_infra.enums.Perfil;
 import br.com.vrinteriorpaulista.validator_infra.repository.UsuarioRepository;
@@ -7,12 +8,9 @@ import com.jayway.jsonpath.JsonPath;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.security.crypto.password.PasswordEncoder;
-import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.web.servlet.MockMvc;
 
 import static org.hamcrest.Matchers.emptyOrNullString;
@@ -24,11 +22,9 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 /**
- * Fluxo de autenticação ponta a ponta com H2 em memória (profile "test"); o admin vem do DataSeeder.
+ * Fluxo de autenticação ponta a ponta contra Postgres no Testcontainers; o admin vem do DataSeeder.
  */
-@SpringBootTest
-@AutoConfigureMockMvc
-@ActiveProfiles("test")
+@IntegrationTest
 class AuthIntegrationTest {
 
     @Autowired

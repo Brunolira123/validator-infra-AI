@@ -1,5 +1,6 @@
 package br.com.vrinteriorpaulista.validator_infra.controller;
 
+import br.com.vrinteriorpaulista.validator_infra.config.IntegrationTest;
 import br.com.vrinteriorpaulista.validator_infra.dto.vision.AnaliseEquipamentoDTO;
 import br.com.vrinteriorpaulista.validator_infra.dto.vision.ArmazenamentoExtraido;
 import br.com.vrinteriorpaulista.validator_infra.dto.vision.CampoExtraido;
@@ -11,12 +12,9 @@ import com.jayway.jsonpath.JsonPath;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.mock.web.MockMultipartFile;
-import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.ResultActions;
@@ -37,12 +35,10 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 /**
- * Regras de status do levantamento pela API, com H2 (profile "test"). O VisionProvider é mockado:
+ * Regras de status do levantamento pela API, contra Postgres no Testcontainers. O VisionProvider é mockado:
  * nenhum teste chama a IA paga, e dá para provar que ela não é chamada em levantamento bloqueado.
  */
-@SpringBootTest
-@AutoConfigureMockMvc
-@ActiveProfiles("test")
+@IntegrationTest
 class LevantamentoStatusIntegrationTest {
 
     private static final byte[] PNG = {(byte) 0x89, 'P', 'N', 'G', '\r', '\n', 0x1A, '\n'};
