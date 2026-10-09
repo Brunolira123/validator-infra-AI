@@ -28,6 +28,15 @@ public class LevantamentoController {
         this.relatorioService = relatorioService;
     }
 
+    @PreAuthorize("hasAnyRole('ADMIN', 'COMERCIAL', 'TECNICO') and (#clienteId != null or hasRole('ADMIN'))")
+    @Operation(summary = "Lista levantamentos, mais recentes primeiro", description = "Com clienteId, lista os levantamentos do cliente (404 se o cliente não existir). Sem clienteId, lista todos e só é permitido para ADMIN (403 para os demais perfis).")
+    @GetMapping
+    public List<LevantamentoResponse> listar(@RequestParam(required = false) Long clienteId) {
+        return service.listarPorCliente(clienteId).stream()
+                .map(LevantamentoResponse::from)
+                .toList();
+    }
+
     @PreAuthorize("hasAnyRole('COMERCIAL', 'ADMIN')")
     @Operation(summary = "Cria um levantamento em rascunho")
     @PostMapping

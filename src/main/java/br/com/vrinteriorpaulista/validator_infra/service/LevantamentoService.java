@@ -179,6 +179,21 @@ public class LevantamentoService {
         return e;
     }
 
+    /**
+     * Levantamentos do cliente, mais recentes primeiro. Sem clienteId, lista todos
+     * (o controller restringe esse caso a ADMIN).
+     */
+    @Transactional(readOnly = true)
+    public List<Levantamento> listarPorCliente(Long clienteId) {
+        if (clienteId == null) {
+            return levantamentoRepo.findAllOrderByCriadoEmDesc();
+        }
+        if (!clienteRepo.existsById(clienteId)) {
+            throw new EntityNotFoundException("Cliente não encontrado");
+        }
+        return levantamentoRepo.findByClienteIdOrderByCriadoEmDesc(clienteId);
+    }
+
     public List<EquipamentoResponse> listarEquipamentos(Long levantamentoId) {
         if (!levantamentoRepo.existsById(levantamentoId)) {
             throw new EntityNotFoundException("Levantamento não encontrado");
