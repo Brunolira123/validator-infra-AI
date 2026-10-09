@@ -18,7 +18,7 @@ import java.nio.charset.StandardCharsets;
 public class OpenRouterVisionProvider implements VisionProvider {
 
     private final ChatClient chatClient;
-    private final ObjectMapper objectMapper;
+    private final RespostaVisionParser parser;
     private final String promptTemplate;
 
     public OpenRouterVisionProvider(
@@ -27,7 +27,7 @@ public class OpenRouterVisionProvider implements VisionProvider {
             @Value("classpath:prompts/vision-extract.txt") Resource promptResource
     ) throws IOException {
         this.chatClient = builder.build();
-        this.objectMapper = objectMapper;
+        this.parser = new RespostaVisionParser(objectMapper);
         this.promptTemplate = new String(promptResource.getInputStream().readAllBytes(), StandardCharsets.UTF_8);
     }
 
@@ -50,39 +50,6 @@ public class OpenRouterVisionProvider implements VisionProvider {
                 .call()
                 .content();
 
-        try {
-            String jsonLimpo = extrairJson(resposta);
-            return objectMapper.readValue(jsonLimpo, AnaliseEquipamentoDTO.class);
-        } catch (Exception e) {
-            throw new RuntimeException("Falha ao desserializar resposta da IA: " + resposta, e);
-        }
-    }
-
-    /**
-     * Remove markdown/cercas que a IA às vezes coloca em volta do JSON.
-     */
-    private String extrairJson(String resposta) {
-        if (resposta == null || resposta.isBlank()) {
-            throw new RuntimeException("Resposta da IA vazia");
-        }
-
-        String limpo = resposta.trim();
-
-        // Remove cercas markdown ```json ... ```
-        if (limpo.startsWith("```")) {
-            limpo = limpo.replaceFirst("^```(?:json)?\\s*", "");
-            limpo = limpo.replaceFirst("\\s*```$", "");
-            limpo = limpo.trim();
-        }
-
-        // Se ainda não começa com {, procura o primeiro { e o último }
-        int primeiroChave = limpo.indexOf('{');
-        int ultimoChave = limpo.lastIndexOf('}');
-
-        if (primeiroChave == -1 || ultimoChave == -1 || ultimoChave < primeiroChave) {
-            throw new RuntimeException("Nenhum JSON encontrado na resposta: " + resposta);
-        }
-
-        return limpo.substring(primeiroChave, ultimoChave + 1);
+        return parser.interpretar(resposta);
     }
 }
