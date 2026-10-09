@@ -1,0 +1,55 @@
+name: validator-infra
+
+services:
+  postgres:
+    image: postgres:14-alpine
+    environment:
+      POSTGRES_DB: validator_infra
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${DB_PASSWORD:?Defina DB_PASSWORD no .env}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    ports:
+      # Exposto só no localhost, para acessar pela IDE; 5433 para não conflitar com um Postgres local
+      - "127.0.0.1:${COMPOSE_DB_PORT:-5433}:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d validator_infra"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
+  app:
+    build: .
+    image: validator-infra:dev
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      # Fixos: dentro da rede do Compose o banco é sempre postgres:5432 (ignora DB_HOST/DB_PORT do .env)
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_PASSWORD: ${DB_PASSWORD:?Defina DB_PASSWORD no .env}
+      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:?Defina OPENROUTER_API_KEY no .env}
+      JWT_SECRET: ${JWT_SECRET:?Defina JWT_SECRET no .env}
+      FOTOS_PATH: /app/storage/fotos
+      SPRING_JPA_SHOW_SQL: "false"
+    ports:
+      - "${APP_PORT:-8080}:8080"
+    volumes:
+      - fotos:/app/storage/fotos
+    restart: unless-stopped
+
+  adminer:
+    image: adminer:4
+    profiles: ["dev"]
+    depends_on:
+      - postgres
+    environment:
+      ADMINER_DEFAULT_SERVER: postgres
+    ports:
+      - "127.0.0.1:${ADMINER_PORT:-8081}:8080"
+
+volumes:
+  postgres-data:
+  fotos:
