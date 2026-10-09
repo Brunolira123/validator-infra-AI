@@ -30,7 +30,7 @@ services:
       DB_HOST: postgres
       DB_PORT: 5432
       DB_PASSWORD: ${DB_PASSWORD:?Defina DB_PASSWORD no .env}
-      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:?Defina OPENROUTER_API_KEY no .env}
+      GEMINI_API_KEY: ${GEMINI_API_KEY:?Defina GEMINI_API_KEY no .env}
       JWT_SECRET: ${JWT_SECRET:?Defina JWT_SECRET no .env}
       FOTOS_PATH: /app/storage/fotos
       SPRING_JPA_SHOW_SQL: "false"

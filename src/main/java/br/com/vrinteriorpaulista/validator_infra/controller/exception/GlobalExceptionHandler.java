@@ -20,6 +20,7 @@ import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
+import org.springframework.web.multipart.MaxUploadSizeExceededException;
 
 import java.time.LocalDateTime;
 import java.util.List;
@@ -90,6 +91,11 @@ public class GlobalExceptionHandler {
     public ResponseEntity<ErroResponse> parametroInvalido(MethodArgumentTypeMismatchException ex, HttpServletRequest req) {
         String mensagem = "Valor inválido para o parâmetro '" + ex.getName() + "': " + ex.getValue();
         return erro(HttpStatus.BAD_REQUEST, mensagem, req, null);
+    }
+
+    @ExceptionHandler(MaxUploadSizeExceededException.class)
+    public ResponseEntity<ErroResponse> uploadMuitoGrande(MaxUploadSizeExceededException ex, HttpServletRequest req) {
+        return erro(HttpStatus.CONTENT_TOO_LARGE, "Foto muito grande. Máximo 20MB.", req, null);
     }
 
     @ExceptionHandler(Exception.class)

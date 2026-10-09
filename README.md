@@ -14,7 +14,7 @@ Copie `.env.example` para `.env` na raiz e preencha:
 
 | Variável | Uso |
 |---|---|
-| `OPENROUTER_API_KEY` | Chave do OpenRouter, usada na extração de dados das fotos por IA |
+| `GEMINI_API_KEY` | Chave da API do Gemini (Google AI Studio), usada na extração de dados das fotos por IA |
 | `DB_PASSWORD` | Senha do PostgreSQL. No Docker Compose, também define a senha do container do banco |
 | `JWT_SECRET` | Segredo de assinatura dos tokens JWT, com no mínimo 32 caracteres. Gere um aleatório, por exemplo com `openssl rand -hex 32` |
 | `DB_HOST`, `DB_PORT` | Só para rodar sem Docker. Padrão `localhost:5432`. O Compose ignora esses valores para a aplicação |
