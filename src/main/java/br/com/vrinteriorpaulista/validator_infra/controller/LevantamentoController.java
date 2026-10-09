@@ -51,12 +51,10 @@ public class LevantamentoController {
         return LevantamentoResponse.from(service.buscar(id));
     }
 
-    @Operation(summary = "Lista os equipamentos do levantamento")
+    @Operation(summary = "Lista os equipamentos do levantamento", description = "Ordenados por sequência, com a quantidade de fotos de cada um.")
     @GetMapping("/{id}/equipamentos")
     public List<EquipamentoResponse> listarEquipamentos(@PathVariable Long id) {
-        return service.buscar(id).getEquipamentos().stream()
-                .map(EquipamentoResponse::from)
-                .toList();
+        return service.listarEquipamentos(id);
     }
 
     @Operation(summary = "Relatório consolidado do levantamento", description = "Resumo do dimensionamento, contagem por resultado e detalhe de cada equipamento com o resumo da análise.")

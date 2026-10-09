@@ -1,6 +1,8 @@
 package br.com.vrinteriorpaulista.validator_infra.dto.response;
 
-import br.com.vrinteriorpaulista.validator_infra.entity.Equipamento;
+import br.com.vrinteriorpaulista.validator_infra.enums.CategoriaEquipamento;
+import br.com.vrinteriorpaulista.validator_infra.enums.FuncaoEquipamento;
+import br.com.vrinteriorpaulista.validator_infra.enums.StatusAnalise;
 
 public record EquipamentoResponse(
         Long id,
@@ -10,14 +12,15 @@ public record EquipamentoResponse(
         String status,
         int qtdFotos
 ) {
-    public static EquipamentoResponse from(Equipamento e) {
-        return new EquipamentoResponse(
-                e.getId(),
-                e.getCategoria().name(),
-                e.getFuncao().name(),
-                e.getSequencia(),
-                e.getStatus().name(),
-                e.getFotos() != null ? e.getFotos().size() : 0
-        );
+    /**
+     * Usado pela projeção JPQL (select new ...) em EquipamentoRepository.
+     */
+    public EquipamentoResponse(Long id,
+                               CategoriaEquipamento categoria,
+                               FuncaoEquipamento funcao,
+                               Integer sequencia,
+                               StatusAnalise status,
+                               Long qtdFotos) {
+        this(id, categoria.name(), funcao.name(), sequencia, status.name(), qtdFotos.intValue());
     }
 }

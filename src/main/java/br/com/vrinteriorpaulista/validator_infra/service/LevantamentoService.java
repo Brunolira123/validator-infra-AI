@@ -1,6 +1,7 @@
 package br.com.vrinteriorpaulista.validator_infra.service;
 
 import br.com.vrinteriorpaulista.validator_infra.dto.request.LevantamentoRequest;
+import br.com.vrinteriorpaulista.validator_infra.dto.response.EquipamentoResponse;
 import br.com.vrinteriorpaulista.validator_infra.entity.*;
 import br.com.vrinteriorpaulista.validator_infra.enums.CategoriaEquipamento;
 import br.com.vrinteriorpaulista.validator_infra.enums.FuncaoEquipamento;
@@ -146,6 +147,13 @@ public class LevantamentoService {
         e.setSequencia(seq);
         e.setStatus(StatusAnalise.PENDENTE);
         return e;
+    }
+
+    public List<EquipamentoResponse> listarEquipamentos(Long levantamentoId) {
+        if (!levantamentoRepo.existsById(levantamentoId)) {
+            throw new EntityNotFoundException("Levantamento não encontrado");
+        }
+        return equipamentoRepo.listarComQtdFotos(levantamentoId);
     }
 
     public Levantamento buscar(Long id) {
