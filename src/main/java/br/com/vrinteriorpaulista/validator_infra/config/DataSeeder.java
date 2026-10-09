@@ -10,6 +10,7 @@ import br.com.vrinteriorpaulista.validator_infra.repository.RequisitoRepository;
 import br.com.vrinteriorpaulista.validator_infra.repository.UsuarioRepository;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.boot.CommandLineRunner;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Component;
 
 import java.time.LocalDateTime;
@@ -21,18 +22,22 @@ public class DataSeeder implements CommandLineRunner {
     private final RequisitoRepository requisitoRepo;
     private final EquipamentoHomologadoRepository homologadoRepo;
     private final UsuarioRepository usuarioRepo;
+    private final PasswordEncoder passwordEncoder;
 
     public DataSeeder(RequisitoRepository requisitoRepo,
                       EquipamentoHomologadoRepository homologadoRepo,
-                      UsuarioRepository usuarioRepo) {
+                      UsuarioRepository usuarioRepo,
+                      PasswordEncoder passwordEncoder) {
         this.requisitoRepo = requisitoRepo;
         this.homologadoRepo = homologadoRepo;
         this.usuarioRepo = usuarioRepo;
+        this.passwordEncoder = passwordEncoder;
     }
 
     @Override
     public void run(String... args) {
         popularUsuarioInicial();
+        converterSenhasEmTextoPuro();
 
         if (requisitoRepo.count() == 0) {
             log.info("Populando base de requisitos VR...");
@@ -220,13 +225,26 @@ public class DataSeeder implements CommandLineRunner {
         if (usuarioRepo.count() == 0) {
             Usuario u = new Usuario();
             u.setLogin("admin");
-            u.setSenha("admin");  // TODO: hash BCrypt quando implementar Spring Security
+            u.setSenha(passwordEncoder.encode("admin"));
             u.setNome("Administrador");
             u.setEmail("admin@vr.com.br");
             u.setPerfil(Perfil.ADMIN);
             u.setAtivo(true);
             usuarioRepo.save(u);
-            log.info("Usuário inicial criado: admin/admin");
+            log.warn("Usuário inicial 'admin' criado com a senha padrão de desenvolvimento. Troque antes de usar em produção.");
+        }
+    }
+
+    /**
+     * Usuários gravados antes do Spring Security têm a senha em texto puro; converte para BCrypt.
+     */
+    private void converterSenhasEmTextoPuro() {
+        for (Usuario u : usuarioRepo.findAll()) {
+            if (u.getSenha() != null && !u.getSenha().startsWith("$2")) {
+                u.setSenha(passwordEncoder.encode(u.getSenha()));
+                usuarioRepo.save(u);
+                log.warn("Senha do usuário '{}' estava em texto puro e foi convertida para BCrypt", u.getLogin());
+            }
         }
     }
 }

@@ -58,6 +58,7 @@ public class AnaliseService {
     private final VisionProvider visionProvider;
     private final MotorRegrasService motorRegras;
     private final ObjectMapper objectMapper;
+    private final UsuarioLogadoService usuarioLogado;
     private final TransactionTemplate transacaoLeitura;
     private final TransactionTemplate transacaoEscrita;
 
@@ -71,6 +72,7 @@ public class AnaliseService {
                           VisionProvider visionProvider,
                           MotorRegrasService motorRegras,
                           ObjectMapper objectMapper,
+                          UsuarioLogadoService usuarioLogado,
                           PlatformTransactionManager transactionManager) {
         this.equipamentoRepo = equipamentoRepo;
         this.fotoRepo = fotoRepo;
@@ -79,6 +81,7 @@ public class AnaliseService {
         this.visionProvider = visionProvider;
         this.motorRegras = motorRegras;
         this.objectMapper = objectMapper;
+        this.usuarioLogado = usuarioLogado;
         this.transacaoLeitura = new TransactionTemplate(transactionManager);
         this.transacaoLeitura.setReadOnly(true);
         this.transacaoEscrita = new TransactionTemplate(transactionManager);
@@ -89,7 +92,7 @@ public class AnaliseService {
      * O nome do arquivo em disco é gerado (UUID + extensão do content-type); nada do nome original entra no path.
      */
     @Transactional
-    public Foto uploadFoto(Long equipamentoId, Long usuarioId, MultipartFile file) {
+    public Foto uploadFoto(Long equipamentoId, MultipartFile file) {
         String contentType = normalizarContentType(file.getContentType());
         String extensao = EXTENSOES_PERMITIDAS.get(contentType);
         if (extensao == null) {
@@ -100,7 +103,7 @@ public class AnaliseService {
         }
 
         Equipamento eq = buscarEquipamento(equipamentoId);
-        Usuario user = buscarUsuario(usuarioId);
+        Usuario user = usuarioLogado.usuario();
 
         Path destino = salvarArquivo(equipamentoId, extensao, file);
 
@@ -147,7 +150,8 @@ public class AnaliseService {
      * 2) sem transação: IA + motor de regras;
      * 3) transação de escrita: persiste a análise e atualiza o status do equipamento.
      */
-    public ResultadoAnaliseDTO analisarEquipamento(Long equipamentoId, Long usuarioId) {
+    public ResultadoAnaliseDTO analisarEquipamento(Long equipamentoId) {
+        Long usuarioId = usuarioLogado.atual().id();
         DadosParaAnalise entrada = transacaoLeitura.execute(status -> carregarDadosParaAnalise(equipamentoId, usuarioId));
 
         AnaliseEquipamentoDTO dadosIa = visionProvider.analisarImagem(entrada.imagem(), entrada.contentType());
@@ -168,7 +172,7 @@ public class AnaliseService {
         Analise analise = analiseRepo.findByEquipamentoId(equipamentoId)
                 .orElseThrow(() -> new EntityNotFoundException(
                         "Análise não encontrada. Execute a análise inicial primeiro."));
-        Usuario revisor = buscarUsuario(req.usuarioId());
+        Usuario revisor = usuarioLogado.usuario();
 
         aplicarRevisao(analise, req);
 

@@ -10,6 +10,7 @@ import br.com.vrinteriorpaulista.validator_infra.service.RelatorioService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -27,18 +28,21 @@ public class LevantamentoController {
         this.relatorioService = relatorioService;
     }
 
+    @PreAuthorize("hasAnyRole('COMERCIAL', 'ADMIN')")
     @Operation(summary = "Cria um levantamento em rascunho")
     @PostMapping
     public LevantamentoResponse criar(@RequestBody @Valid LevantamentoRequest req) {
         return LevantamentoResponse.from(service.criar(req));
     }
 
+    @PreAuthorize("hasAnyRole('COMERCIAL', 'ADMIN')")
     @Operation(summary = "Gera os equipamentos a partir do dimensionamento", description = "Retorna 409 se o levantamento já tiver equipamentos.")
     @PostMapping("/{id}/gerar-equipamentos")
     public LevantamentoResponse gerarEquipamentos(@PathVariable Long id) {
         return LevantamentoResponse.from(service.gerarEquipamentos(id));
     }
 
+    @PreAuthorize("hasAnyRole('COMERCIAL', 'TECNICO', 'ADMIN')")
     @Operation(summary = "Conclui o levantamento", description = "Retorna 409 com as sequências pendentes se algum equipamento ainda não foi analisado.")
     @PostMapping("/{id}/concluir")
     public LevantamentoResponse concluir(@PathVariable Long id) {

@@ -2,6 +2,7 @@ package br.com.vrinteriorpaulista.validator_infra.controller.exception;
 
 import br.com.vrinteriorpaulista.validator_infra.dto.response.ErroResponse;
 import br.com.vrinteriorpaulista.validator_infra.exception.ServicoIndisponivelException;
+import br.com.vrinteriorpaulista.validator_infra.security.JsonSecurityErrorHandler;
 import jakarta.persistence.EntityNotFoundException;
 import jakarta.servlet.http.HttpServletRequest;
 import lombok.extern.slf4j.Slf4j;
@@ -11,6 +12,9 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.HttpStatusCode;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
+import org.springframework.security.access.AccessDeniedException;
+import org.springframework.security.authentication.BadCredentialsException;
+import org.springframework.security.core.AuthenticationException;
 import org.springframework.web.ErrorResponse;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
@@ -47,6 +51,21 @@ public class GlobalExceptionHandler {
     public ResponseEntity<ErroResponse> iaIndisponivel(RuntimeException ex, HttpServletRequest req) {
         log.warn("Falha no provedor de IA em {} {}: {}", req.getMethod(), req.getRequestURI(), ex.getMessage());
         return erro(HttpStatus.SERVICE_UNAVAILABLE, "Serviço de IA indisponível no momento", req, null);
+    }
+
+    @ExceptionHandler(BadCredentialsException.class)
+    public ResponseEntity<ErroResponse> credenciaisInvalidas(BadCredentialsException ex, HttpServletRequest req) {
+        return erro(HttpStatus.UNAUTHORIZED, ex.getMessage(), req, null);
+    }
+
+    @ExceptionHandler(AuthenticationException.class)
+    public ResponseEntity<ErroResponse> naoAutenticado(AuthenticationException ex, HttpServletRequest req) {
+        return erro(HttpStatus.UNAUTHORIZED, JsonSecurityErrorHandler.MENSAGEM_NAO_AUTENTICADO, req, null);
+    }
+
+    @ExceptionHandler(AccessDeniedException.class)
+    public ResponseEntity<ErroResponse> acessoNegado(AccessDeniedException ex, HttpServletRequest req) {
+        return erro(HttpStatus.FORBIDDEN, JsonSecurityErrorHandler.MENSAGEM_ACESSO_NEGADO, req, null);
     }
 
     @ExceptionHandler(EntityNotFoundException.class)

@@ -21,25 +21,24 @@ public class LevantamentoService {
 
     private final LevantamentoRepository levantamentoRepo;
     private final ClienteRepository clienteRepo;
-    private final UsuarioRepository usuarioRepo;
     private final EquipamentoRepository equipamentoRepo;
+    private final UsuarioLogadoService usuarioLogado;
 
     public LevantamentoService(LevantamentoRepository levantamentoRepo,
                                ClienteRepository clienteRepo,
-                               UsuarioRepository usuarioRepo,
-                               EquipamentoRepository equipamentoRepo) {
+                               EquipamentoRepository equipamentoRepo,
+                               UsuarioLogadoService usuarioLogado) {
         this.levantamentoRepo = levantamentoRepo;
         this.clienteRepo = clienteRepo;
-        this.usuarioRepo = usuarioRepo;
         this.equipamentoRepo = equipamentoRepo;
+        this.usuarioLogado = usuarioLogado;
     }
 
     @Transactional
     public Levantamento criar(LevantamentoRequest req) {
         Cliente cliente = clienteRepo.findById(req.clienteId())
                 .orElseThrow(() -> new EntityNotFoundException("Cliente não encontrado"));
-        Usuario usuario = usuarioRepo.findById(req.usuarioId())
-                .orElseThrow(() -> new EntityNotFoundException("Usuário não encontrado"));
+        Usuario usuario = usuarioLogado.usuario();
 
         Levantamento l = new Levantamento();
         l.setCliente(cliente);
