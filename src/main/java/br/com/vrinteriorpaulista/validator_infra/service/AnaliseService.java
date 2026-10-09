@@ -203,6 +203,8 @@ public class AnaliseService {
 
     /**
      * Análise persistida do equipamento, ou vazio se ainda não foi analisado.
+     * Os dados extraídos vêm das colunas da entidade, que a revisão sobrescreve com as correções do técnico;
+     * por isso já refletem o jsonIaCorrigido quando houver.
      * Análises gravadas antes da coluna json_itens voltam com a lista de itens vazia.
      */
     @Transactional(readOnly = true)
@@ -214,10 +216,16 @@ public class AnaliseService {
                 itens(a.getJsonItens()),
                 a.getFabricante(),
                 a.getModelo(),
+                a.getCpuFabricante(),
                 a.getCpuModelo(),
                 a.getCpuGeracao(),
+                a.getCpuCores(),
+                a.getCpuThreads(),
                 a.getRamGb(),
+                a.getArmazenamentoTipo(),
+                a.getArmazenamentoGb(),
                 a.getSoNome(),
+                a.getSoVersao(),
                 a.getConfiancaGlobal(),
                 a.getAnalisadoEm(),
                 a.getAnalisadoPor() != null ? a.getAnalisadoPor().getNome() : null,
