@@ -211,6 +211,85 @@ curl -s -X POST localhost:8080/api/auth/login \
 
 Use o `token` retornado no header `Authorization: Bearer <token>`. Só `/api/auth/**`, o Swagger e o `/actuator/health` são públicos.
 
+## Deploy em produção
+
+Três containers na mesma rede Docker, no servidor da rede local da VR:
+
+| Container | Imagem | Porta no servidor |
+|---|---|---|
+| `frontend` | `brunoliraarcia/validator-frontend` (nginx + PWA) | **80** |
+| `backend` | `brunoliraarcia/validator-backend` | nenhuma (só rede interna) |
+| `postgres` | `postgres:14-alpine` | nenhuma (só rede interna) |
+
+O nginx do frontend serve o PWA e encaminha `/api/*` para `backend:8080`, então tudo sai pela porta 80 na mesma origem (sem CORS). Swagger, Actuator e os endpoints de debug `/api/vision` e `/api/motor` **não** ficam acessíveis por ela.
+
+As imagens ficam em repositórios **privados** no Docker Hub. Backend e frontend usam **sempre a mesma tag**: se só um dos dois mudou, os dois são buildados e publicados de novo com a tag nova.
+
+### 1. Buildar e publicar (na máquina de desenvolvimento)
+
+Supondo os dois repositórios lado a lado (`validator-infra` e `validator-frontend`):
+
+```bash
+TAG=1.0.0
+
+docker login -u brunoliraarcia
+
+docker build -t brunoliraarcia/validator-backend:$TAG  .
+docker build -t brunoliraarcia/validator-frontend:$TAG ../validator-frontend
+
+docker push brunoliraarcia/validator-backend:$TAG
+docker push brunoliraarcia/validator-frontend:$TAG
+```
+
+> Se o servidor for ARM e a máquina de build x86 (ou o contrário), adicione `--platform linux/amd64` (ou `linux/arm64`) ao `docker build`.
+
+### 2. Primeira subida no servidor
+
+O servidor precisa só do Docker e de dois arquivos deste repositório: `docker-compose.prod.yml` e o `prod.env`.
+
+```bash
+# No Docker Hub, crie um Access Token só de leitura (Account Settings → Personal access tokens)
+# e use-o como senha: o servidor não precisa da senha da conta
+docker login -u brunoliraarcia
+
+cp prod.env.example prod.env     # preencha DB_PASSWORD, GEMINI_API_KEY, JWT_SECRET e TAG
+docker compose -f docker-compose.prod.yml --env-file prod.env pull
+docker compose -f docker-compose.prod.yml --env-file prod.env up -d
+docker compose -f docker-compose.prod.yml --env-file prod.env ps    # os 3 devem ficar "healthy"
+```
+
+O sistema fica em `http://<ip-do-servidor>/`. **Troque a senha do `admin` logo no primeiro acesso.**
+
+O `prod.env` tem segredos: não versione (o `.gitignore` já o ignora) e deixe-o legível só pelo usuário que roda o Docker (`chmod 600 prod.env`).
+
+### 3. Atualizar para uma versão nova
+
+Depois de publicar a nova tag (passo 1), no servidor:
+
+```bash
+# Edite TAG no prod.env (ex.: TAG=1.1.0)
+docker compose -f docker-compose.prod.yml --env-file prod.env pull
+docker compose -f docker-compose.prod.yml --env-file prod.env up -d
+docker image prune -f            # remove as imagens antigas
+```
+
+**Rollback**: volte o `TAG` para a versão anterior e rode `up -d` de novo. Banco e fotos ficam nos volumes e não são afetados.
+
+Logs: `docker compose -f docker-compose.prod.yml --env-file prod.env logs -f backend`.
+
+### Pendências
+
+- [ ] **TODO: backup.** Por enquanto é manual. Todos os dados ficam em dois volumes, `validator-prod_postgres-data` e `validator-prod_fotos`, e um backup só vale com os dois juntos:
+  ```bash
+  docker compose -f docker-compose.prod.yml --env-file prod.env exec -T postgres \
+    pg_dump -U postgres -Fc validator_infra > backup-$(date +%F).dump
+  docker run --rm -v validator-prod_fotos:/fotos:ro -v "$PWD":/backup alpine \
+    tar czf /backup/fotos-$(date +%F).tar.gz -C /fotos .
+  ```
+  Guarde os arquivos fora do servidor. **Nunca** rode `down -v` em produção: apaga os dois volumes.
+- [ ] **TODO: HTTPS** (próximo passo, quando o sistema for exposto fora da rede local). Plano: Let's Encrypt com Caddy ou Nginx Proxy Manager na frente do container `frontend`. Enquanto for HTTP, o app funciona no navegador, mas não instala como PWA (service worker exige HTTPS fora de `localhost`).
+- [ ] **TODO: Flyway** (próxima fase). Hoje o schema é atualizado por `spring.jpa.hibernate.ddl-auto=update`, um risco aceito no MVP. Faça backup antes de subir uma versão que mude entidades.
+
 ## Testes
 
 ```bash

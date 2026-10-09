@@ -1,6 +1,7 @@
 # Produção (servidor da rede local VR). Usa as imagens publicadas no Docker Hub — não builda nada.
+# Backend e frontend usam sempre a mesma TAG. Passo a passo no README, seção "Deploy em produção".
 #
-#   docker login                      # conta com acesso ao repositório privado
+#   docker login                      # conta com acesso aos repositórios privados de brunoliraarcia
 #   docker compose -f docker-compose.prod.yml --env-file prod.env pull
 #   docker compose -f docker-compose.prod.yml --env-file prod.env up -d
 #
@@ -32,7 +33,7 @@ services:
     logging: *logging
 
   backend:
-    image: vr/validator-backend:${BACKEND_TAG:-latest}
+    image: brunoliraarcia/validator-backend:${TAG:-1.0.0}
     depends_on:
       postgres:
         condition: service_healthy
@@ -50,7 +51,7 @@ services:
     logging: *logging
 
   frontend:
-    image: vr/validator-frontend:${FRONTEND_TAG:-latest}
+    image: brunoliraarcia/validator-frontend:${TAG:-1.0.0}
     depends_on:
       backend:
         condition: service_healthy
