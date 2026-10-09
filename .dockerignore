@@ -8,3 +8,5 @@ storage/
 src/test/
 Dockerfile
 docker-compose.yml
+*.env
+docker-compose.prod.yml

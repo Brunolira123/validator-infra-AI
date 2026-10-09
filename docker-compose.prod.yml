@@ -1,0 +1,64 @@
+# Produção (servidor da rede local VR). Usa as imagens publicadas no Docker Hub — não builda nada.
+#
+#   docker login                      # conta com acesso ao repositório privado
+#   docker compose -f docker-compose.prod.yml --env-file prod.env pull
+#   docker compose -f docker-compose.prod.yml --env-file prod.env up -d
+#
+# Só o frontend expõe porta (80). Backend e Postgres ficam acessíveis apenas pela rede interna:
+# o nginx do frontend encaminha /api/* para backend:8080.
+name: validator-prod
+
+x-logging: &logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "5"
+
+services:
+  postgres:
+    image: postgres:14-alpine
+    environment:
+      POSTGRES_DB: validator_infra
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${DB_PASSWORD:?Defina DB_PASSWORD no prod.env}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d validator_infra"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+    logging: *logging
+
+  backend:
+    image: vr/validator-backend:${BACKEND_TAG:-latest}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_PASSWORD: ${DB_PASSWORD:?Defina DB_PASSWORD no prod.env}
+      GEMINI_API_KEY: ${GEMINI_API_KEY:?Defina GEMINI_API_KEY no prod.env}
+      JWT_SECRET: ${JWT_SECRET:?Defina JWT_SECRET no prod.env}
+      FOTOS_PATH: /app/storage/fotos
+      SPRING_JPA_SHOW_SQL: "false"
+    volumes:
+      - fotos:/app/storage/fotos
+    restart: unless-stopped
+    logging: *logging
+
+  frontend:
+    image: vr/validator-frontend:${FRONTEND_TAG:-latest}
+    depends_on:
+      backend:
+        condition: service_healthy
+    ports:
+      - "${HTTP_PORT:-80}:80"
+    restart: unless-stopped
+    logging: *logging
+
+volumes:
+  postgres-data:
+  fotos:
