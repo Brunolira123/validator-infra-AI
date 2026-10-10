@@ -30,6 +30,8 @@ import java.util.List;
 public class GlobalExceptionHandler {
 
     private static final String MENSAGEM_ERRO_INTERNO = "Erro interno. Tente novamente ou contate o suporte.";
+    static final String MENSAGEM_IA_SOBRECARREGADA =
+            "A IA está sobrecarregada no momento. Aguarde alguns segundos e tente novamente.";
 
     @ExceptionHandler(IllegalArgumentException.class)
     public ResponseEntity<ErroResponse> argumentoInvalido(IllegalArgumentException ex, HttpServletRequest req) {
@@ -48,10 +50,18 @@ public class GlobalExceptionHandler {
         return erro(HttpStatus.SERVICE_UNAVAILABLE, ex.getMessage(), req, null);
     }
 
-    @ExceptionHandler({NonTransientAiException.class, TransientAiException.class})
-    public ResponseEntity<ErroResponse> iaIndisponivel(RuntimeException ex, HttpServletRequest req) {
+    @ExceptionHandler(NonTransientAiException.class)
+    public ResponseEntity<ErroResponse> iaIndisponivel(NonTransientAiException ex, HttpServletRequest req) {
         log.warn("Falha no provedor de IA em {} {}: {}", req.getMethod(), req.getRequestURI(), ex.getMessage());
         return erro(HttpStatus.SERVICE_UNAVAILABLE, "Serviço de IA indisponível no momento", req, null);
+    }
+
+    /** Transitório = retries e fallback de modelo esgotados; o front exibe a mensagem como veio. */
+    @ExceptionHandler(TransientAiException.class)
+    public ResponseEntity<ErroResponse> iaSobrecarregada(TransientAiException ex, HttpServletRequest req) {
+        log.warn("IA sobrecarregada em {} {}: {}", req.getMethod(), req.getRequestURI(),
+                ex.getCause() != null ? ex.getCause().getMessage() : ex.getMessage());
+        return erro(HttpStatus.SERVICE_UNAVAILABLE, MENSAGEM_IA_SOBRECARREGADA, req, null);
     }
 
     @ExceptionHandler(BadCredentialsException.class)
