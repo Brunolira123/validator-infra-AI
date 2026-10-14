@@ -217,8 +217,8 @@ Três containers na mesma rede Docker, no servidor da rede local da VR:
 
 | Container | Imagem | Porta no servidor |
 |---|---|---|
-| `frontend` | `brunoliraarcia/validator-frontend` (nginx + PWA) | **80** |
-| `backend` | `brunoliraarcia/validator-backend` | nenhuma (só rede interna) |
+| `frontend` | `brunoliragarcia/validator-frontend` (nginx + PWA) | **80** |
+| `backend` | `brunoliragarcia/validator-backend` | nenhuma (só rede interna) |
 | `postgres` | `postgres:14-alpine` | nenhuma (só rede interna) |
 
 O nginx do frontend serve o PWA e encaminha `/api/*` para `backend:8080`, então tudo sai pela porta 80 na mesma origem (sem CORS). Swagger, Actuator e os endpoints de debug `/api/vision` e `/api/motor` **não** ficam acessíveis por ela.
@@ -232,13 +232,13 @@ Supondo os dois repositórios lado a lado (`validator-infra` e `validator-fronte
 ```bash
 TAG=1.0.0
 
-docker login -u brunoliraarcia
+docker login -u brunoliragarcia
 
-docker build -t brunoliraarcia/validator-backend:$TAG  .
-docker build -t brunoliraarcia/validator-frontend:$TAG ../validator-frontend
+docker build -t brunoliragarcia/validator-backend:$TAG  .
+docker build -t brunoliragarcia/validator-frontend:$TAG ../validator-frontend
 
-docker push brunoliraarcia/validator-backend:$TAG
-docker push brunoliraarcia/validator-frontend:$TAG
+docker push brunoliragarcia/validator-backend:$TAG
+docker push brunoliragarcia/validator-frontend:$TAG
 ```
 
 > Se o servidor for ARM e a máquina de build x86 (ou o contrário), adicione `--platform linux/amd64` (ou `linux/arm64`) ao `docker build`.
