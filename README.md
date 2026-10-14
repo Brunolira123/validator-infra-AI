@@ -113,7 +113,7 @@ A IA fica atrás da interface `VisionProvider`. Trocar de provedor (já passou p
 | `POST` | `/api/levantamentos/{id}/concluir` · `/reabrir` · `/cancelar` | conforme a ação | Ciclo de vida |
 | `GET` | `/api/levantamentos/{id}/relatorio` | todos | Relatório consolidado do levantamento |
 
-A lista completa, com exemplos, fica no Swagger: `http://localhost:8080/swagger-ui.html`.
+A lista completa, com exemplos, fica no Swagger: `http://localhost:8075/swagger-ui.html`.
 
 <details>
 <summary><b>Exemplo de resposta de <code>GET /api/equipamentos/{id}/analise</code></b></summary>
@@ -184,9 +184,9 @@ docker compose down -v                # para e APAGA os volumes (banco e fotos)
 
 | Serviço | Endereço |
 |---|---|
-| API | http://localhost:8080 |
-| Swagger UI | http://localhost:8080/swagger-ui.html |
-| Health | http://localhost:8080/actuator/health |
+| API | http://localhost:8075 |
+| Swagger UI | http://localhost:8075/swagger-ui.html |
+| Health | http://localhost:8075/actuator/health |
 | Adminer (profile `dev`) | http://localhost:8081: sistema PostgreSQL, servidor `postgres`, usuário `postgres`, banco `validator_infra` |
 | Postgres (para a IDE) | `localhost:5433` |
 
@@ -205,7 +205,7 @@ Com um PostgreSQL 14 local e o banco `validator_infra` criado:
 Na primeira subida é criado o usuário `admin` / `admin` (perfil ADMIN). **Troque essa senha antes de qualquer uso fora do ambiente de desenvolvimento.**
 
 ```bash
-curl -s -X POST localhost:8080/api/auth/login \
+curl -s -X POST localhost:8075/api/auth/login \
   -H 'Content-Type: application/json' -d '{"login":"admin","senha":"admin"}'
 ```
 
@@ -221,7 +221,7 @@ Três containers na mesma rede Docker, no servidor da rede local da VR:
 | `backend` | `brunoliragarcia/validator-backend` | nenhuma (só rede interna) |
 | `postgres` | `postgres:14-alpine` | nenhuma (só rede interna) |
 
-O nginx do frontend serve o PWA e encaminha `/api/*` para `backend:8080`, então tudo sai pela porta 80 na mesma origem (sem CORS). Swagger, Actuator e os endpoints de debug `/api/vision` e `/api/motor` **não** ficam acessíveis por ela.
+O nginx do frontend serve o PWA e encaminha `/api/*` para `backend:8075`, então tudo sai pela porta 80 na mesma origem (sem CORS). Swagger, Actuator e os endpoints de debug `/api/vision` e `/api/motor` **não** ficam acessíveis por ela.
 
 As imagens ficam em repositórios **públicos** no Docker Hub (não contêm segredos: tudo vem do `prod.env`). Backend e frontend usam **sempre a mesma tag**: se só um dos dois mudou, os dois são buildados e publicados de novo com a tag nova.
 

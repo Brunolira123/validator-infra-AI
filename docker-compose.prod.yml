@@ -5,7 +5,7 @@
 #   docker compose -f docker-compose.prod.yml --env-file prod.env up -d
 #
 # Só o frontend expõe porta (80). Backend e Postgres ficam acessíveis apenas pela rede interna:
-# o nginx do frontend encaminha /api/* para backend:8080.
+# o nginx do frontend encaminha /api/* para backend:8075.
 name: validator-prod
 
 x-logging: &logging
@@ -32,7 +32,7 @@ services:
     logging: *logging
 
   backend:
-    image: brunoliragarcia/validator-backend:${TAG:-1.0.0}
+    image: brunoliragarcia/validator-backend:${TAG:-1.0.1}
     depends_on:
       postgres:
         condition: service_healthy
@@ -52,7 +52,7 @@ services:
     logging: *logging
 
   frontend:
-    image: brunoliragarcia/validator-frontend:${TAG:-1.0.0}
+    image: brunoliragarcia/validator-frontend:${TAG:-1.0.1}
     depends_on:
       backend:
         condition: service_healthy

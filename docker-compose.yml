@@ -35,7 +35,7 @@ services:
       FOTOS_PATH: /app/storage/fotos
       SPRING_JPA_SHOW_SQL: "false"
     ports:
-      - "${APP_PORT:-8080}:8080"
+      - "${APP_PORT:-8075}:8075"
     volumes:
       - fotos:/app/storage/fotos
     restart: unless-stopped

@@ -28,9 +28,9 @@ USER app
 ENV FOTOS_PATH=/app/storage/fotos \
     JAVA_OPTS="-XX:MaxRAMPercentage=75"
 
-EXPOSE 8080
+EXPOSE 8075
 
 HEALTHCHECK --interval=15s --timeout=5s --start-period=90s --retries=5 \
-    CMD wget -qO- http://localhost:8080/actuator/health | grep -q '"status":"UP"' || exit 1
+    CMD wget -qO- http://localhost:8075/actuator/health | grep -q '"status":"UP"' || exit 1
 
 ENTRYPOINT ["sh", "-c", "exec java $JAVA_OPTS -jar app.jar"]
