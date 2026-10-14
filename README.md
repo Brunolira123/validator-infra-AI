@@ -223,7 +223,7 @@ Três containers na mesma rede Docker, no servidor da rede local da VR:
 
 O nginx do frontend serve o PWA e encaminha `/api/*` para `backend:8080`, então tudo sai pela porta 80 na mesma origem (sem CORS). Swagger, Actuator e os endpoints de debug `/api/vision` e `/api/motor` **não** ficam acessíveis por ela.
 
-As imagens ficam em repositórios **privados** no Docker Hub. Backend e frontend usam **sempre a mesma tag**: se só um dos dois mudou, os dois são buildados e publicados de novo com a tag nova.
+As imagens ficam em repositórios **públicos** no Docker Hub (não contêm segredos: tudo vem do `prod.env`). Backend e frontend usam **sempre a mesma tag**: se só um dos dois mudou, os dois são buildados e publicados de novo com a tag nova.
 
 ### 1. Buildar e publicar (na máquina de desenvolvimento)
 
@@ -248,10 +248,6 @@ docker push brunoliraarcia/validator-frontend:$TAG
 O servidor precisa só do Docker e de dois arquivos deste repositório: `docker-compose.prod.yml` e o `prod.env`.
 
 ```bash
-# No Docker Hub, crie um Access Token só de leitura (Account Settings → Personal access tokens)
-# e use-o como senha: o servidor não precisa da senha da conta
-docker login -u brunoliraarcia
-
 cp prod.env.example prod.env     # preencha DB_PASSWORD, GEMINI_API_KEY, JWT_SECRET e TAG
 docker compose -f docker-compose.prod.yml --env-file prod.env pull
 docker compose -f docker-compose.prod.yml --env-file prod.env up -d

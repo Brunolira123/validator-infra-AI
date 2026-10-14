@@ -1,7 +1,6 @@
 # Produção (servidor da rede local VR). Usa as imagens publicadas no Docker Hub — não builda nada.
 # Backend e frontend usam sempre a mesma TAG. Passo a passo no README, seção "Deploy em produção".
 #
-#   docker login                      # conta com acesso aos repositórios privados de brunoliraarcia
 #   docker compose -f docker-compose.prod.yml --env-file prod.env pull
 #   docker compose -f docker-compose.prod.yml --env-file prod.env up -d
 #
