@@ -32,7 +32,7 @@ services:
     logging: *logging
 
   backend:
-    image: brunoliragarcia/validator-backend:${TAG:-1.2.0}
+    image: brunoliragarcia/validator-backend:${TAG:-1.2.1}
     depends_on:
       postgres:
         condition: service_healthy
@@ -54,7 +54,7 @@ services:
     logging: *logging
 
   frontend:
-    image: brunoliragarcia/validator-frontend:${TAG:-1.2.0}
+    image: brunoliragarcia/validator-frontend:${TAG:-1.2.1}
     depends_on:
       backend:
         condition: service_healthy
