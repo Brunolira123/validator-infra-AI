@@ -1,5 +1,8 @@
 package br.com.vrinteriorpaulista.validator_infra.config;
 
+import br.com.vrinteriorpaulista.validator_infra.monitor.repository.ClienteMonitoradoRepository;
+import br.com.vrinteriorpaulista.validator_infra.monitor.security.AgenteAutenticado;
+import br.com.vrinteriorpaulista.validator_infra.monitor.security.AgenteTokenFilter;
 import br.com.vrinteriorpaulista.validator_infra.repository.UsuarioRepository;
 import br.com.vrinteriorpaulista.validator_infra.security.JsonSecurityErrorHandler;
 import br.com.vrinteriorpaulista.validator_infra.security.JwtAuthenticationFilter;
@@ -7,6 +10,8 @@ import br.com.vrinteriorpaulista.validator_infra.security.JwtService;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.security.access.hierarchicalroles.RoleHierarchy;
+import org.springframework.security.access.hierarchicalroles.RoleHierarchyImpl;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.ProviderManager;
 import org.springframework.security.authentication.dao.DaoAuthenticationProvider;
@@ -37,6 +42,7 @@ public class SecurityConfig {
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http,
                                                    JwtService jwtService,
+                                                   ClienteMonitoradoRepository clienteMonitoradoRepo,
                                                    JsonSecurityErrorHandler errorHandler) throws Exception {
         http
                 .csrf(AbstractHttpConfigurer::disable)
@@ -54,10 +60,24 @@ public class SecurityConfig {
                         .requestMatchers("/error").permitAll()
                         .requestMatchers("/actuator/health", "/actuator/health/**").permitAll()
                         .requestMatchers("/api/vision/**", "/api/motor/**").hasRole("ADMIN")
+                        // Agente de monitoramento: só com o token do cliente (AgenteTokenFilter), nunca com JWT de usuário
+                        .requestMatchers(AgenteTokenFilter.CAMINHO + "**").hasRole(AgenteAutenticado.ROLE)
                         .anyRequest().authenticated())
-                .addFilterBefore(new JwtAuthenticationFilter(jwtService), UsernamePasswordAuthenticationFilter.class);
+                .addFilterBefore(new JwtAuthenticationFilter(jwtService), UsernamePasswordAuthenticationFilter.class)
+                .addFilterBefore(new AgenteTokenFilter(clienteMonitoradoRepo), UsernamePasswordAuthenticationFilter.class);
 
         return http.build();
+    }
+
+    /**
+     * DIRETORIA tem acesso total, igual ao ADMIN: vale para os matchers acima e para os @PreAuthorize.
+     * Estático para o Spring aplicar também na segurança de métodos.
+     */
+    @Bean
+    static RoleHierarchy roleHierarchy() {
+        return RoleHierarchyImpl.withDefaultRolePrefix()
+                .role("DIRETORIA").implies("ADMIN")
+                .build();
     }
 
     @Bean

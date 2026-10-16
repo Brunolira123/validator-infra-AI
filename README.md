@@ -213,7 +213,7 @@ Use o `token` retornado no header `Authorization: Bearer <token>`. Só `/api/aut
 
 ## Deploy em produção
 
-Três containers na mesma rede Docker, no servidor da rede local da VR:
+Três containers na mesma rede Docker, no servidor da rede local da VR, mais o Tailscale instalado no próprio servidor (HTTPS público, ver abaixo):
 
 | Container | Imagem | Porta no servidor |
 |---|---|---|
@@ -248,15 +248,39 @@ docker push brunoliragarcia/validator-frontend:$TAG
 O servidor precisa só do Docker e de dois arquivos deste repositório: `docker-compose.prod.yml` e o `prod.env`.
 
 ```bash
-cp prod.env.example prod.env     # preencha DB_PASSWORD, GEMINI_API_KEY, JWT_SECRET e TAG
+cp prod.env.example prod.env     # preencha DB_PASSWORD, GEMINI_API_KEY, JWT_SECRET, DISCORD_WEBHOOK_URL e TAG
 docker compose -f docker-compose.prod.yml --env-file prod.env pull
 docker compose -f docker-compose.prod.yml --env-file prod.env up -d
-docker compose -f docker-compose.prod.yml --env-file prod.env ps    # os 3 devem ficar "healthy"
+docker compose -f docker-compose.prod.yml --env-file prod.env ps    # postgres, backend e frontend devem ficar "healthy"
 ```
 
 O sistema fica em `http://<ip-do-servidor>/`. **Troque a senha do `admin` logo no primeiro acesso.**
 
 O `prod.env` tem segredos: não versione (o `.gitignore` já o ignora) e deixe-o legível só pelo usuário que roda o Docker (`chmod 600 prod.env`).
+
+### HTTPS público (Tailscale Funnel)
+
+O PWA só instala no celular com HTTPS (service worker exige contexto seguro fora de `localhost`). O Tailscale, instalado direto no servidor (fora do Docker), resolve isso de graça: o Funnel publica a porta 80 do `frontend` em `https://<maquina>.<tailnet>.ts.net` com certificado válido, sem abrir porta no roteador nem precisar de domínio. O acesso por `http://<ip-do-servidor>/` na rede local continua funcionando.
+
+Hoje: **https://servidor-inspiron-3647.tail4ddd72.ts.net** (conta Tailscale pessoal; alinhar com o TI).
+
+A URL é **pública**: qualquer pessoa com o link chega na tela de login. Os endpoints de debug continuam bloqueados pelo nginx. É também por ela que os agentes de monitoramento nos clientes enviam os resultados (`/api/monitor/agente/**`).
+
+Configuração única:
+
+1. No [admin do Tailscale](https://login.tailscale.com/admin), em **DNS**: deixe o MagicDNS ligado e habilite **HTTPS Certificates**.
+2. No servidor:
+   ```bash
+   curl -fsSL https://tailscale.com/install.sh | sh
+   sudo tailscale up                                  # abre um link para login na conta
+   sudo tailscale funnel --bg http://localhost:80     # na 1ª vez pede para habilitar o Funnel na tailnet (link)
+   ```
+   O `--bg` mantém o Funnel ativo depois de reiniciar o servidor.
+3. No admin, em **Machines**, abra a máquina do servidor e use **Disable key expiry**: sem isso ela desloga em 180 dias e a URL cai.
+
+Para conferir: `sudo tailscale funnel status`. Para desligar o acesso público: `sudo tailscale funnel --https=443 off`. O primeiro acesso depois de ligar pode levar até ~10 min (propagação do DNS público) e alguns segundos para emitir o certificado.
+
+> A URL fica presa ao PWA instalado e ao `vr.properties` dos agentes: trocar o nome da máquina ou a tailnet obriga a reinstalar o app nos celulares e atualizar os agentes.
 
 ### 3. Atualizar para uma versão nova
 
@@ -283,7 +307,6 @@ Logs: `docker compose -f docker-compose.prod.yml --env-file prod.env logs -f bac
     tar czf /backup/fotos-$(date +%F).tar.gz -C /fotos .
   ```
   Guarde os arquivos fora do servidor. **Nunca** rode `down -v` em produção: apaga os dois volumes.
-- [ ] **TODO: HTTPS** (próximo passo, quando o sistema for exposto fora da rede local). Plano: Let's Encrypt com Caddy ou Nginx Proxy Manager na frente do container `frontend`. Enquanto for HTTP, o app funciona no navegador, mas não instala como PWA (service worker exige HTTPS fora de `localhost`).
 - [ ] **TODO: Flyway** (próxima fase). Hoje o schema é atualizado por `spring.jpa.hibernate.ddl-auto=update`, um risco aceito no MVP. Faça backup antes de subir uma versão que mude entidades.
 
 ## Testes

@@ -46,6 +46,8 @@ services:
       SPRING_JPA_SHOW_SQL: "false"
       # Origin pelo qual o navegador acessa o sistema (IP do servidor na rede local)
       CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-http://192.168.15.16}
+      # Alertas do monitoramento (agentes nos clientes). Vazio desliga os alertas.
+      DISCORD_WEBHOOK_URL: ${DISCORD_WEBHOOK_URL:-}
     volumes:
       - fotos:/app/storage/fotos
     restart: unless-stopped

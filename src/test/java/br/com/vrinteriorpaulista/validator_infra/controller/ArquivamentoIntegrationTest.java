@@ -205,6 +205,31 @@ class ArquivamentoIntegrationTest {
                 .andExpect(status().isOk());
     }
 
+    @Test
+    void diretoriaTemOsMesmosPoderesDoAdmin() throws Exception {
+        String diretoria = token(usuario(Perfil.DIRETORIA), "senha123");
+
+        // Listagem geral de levantamentos (sem clienteId) é só ADMIN
+        mockMvc.perform(get("/api/levantamentos").header(HttpHeaders.AUTHORIZATION, diretoria))
+                .andExpect(status().isOk());
+        mockMvc.perform(delete("/api/clientes/{id}", cliente).header(HttpHeaders.AUTHORIZATION, diretoria))
+                .andExpect(status().isNoContent());
+    }
+
+    @Test
+    void suporteEProjetosNaoAlteramOComercial() throws Exception {
+        for (Perfil perfil : List.of(Perfil.SUPORTE, Perfil.PROJETOS)) {
+            String token = token(usuario(perfil), "senha123");
+            mockMvc.perform(post("/api/clientes")
+                            .header(HttpHeaders.AUTHORIZATION, token)
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content("{\"cnpj\":\"" + cnpj + "\",\"razaoSocial\":\"Sem permissão\"}"))
+                    .andExpect(status().isForbidden());
+            mockMvc.perform(delete("/api/clientes/{id}", cliente).header(HttpHeaders.AUTHORIZATION, token))
+                    .andExpect(status().isForbidden());
+        }
+    }
+
     // ---- Helpers ----
 
     private String criarCliente(String razaoSocial) throws Exception {
