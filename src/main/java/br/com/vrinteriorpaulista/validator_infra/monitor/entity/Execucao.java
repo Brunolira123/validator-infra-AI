@@ -49,13 +49,32 @@ public class Execucao {
     @Column(length = 500)
     private String erro;
 
+    /** Versão do banco VR do cliente (uma só para todas as lojas). */
+    @Column(name = "versao_banco", length = 50)
+    private String versaoBanco;
+
+    @Column(name = "encerramento_automatico")
+    private Boolean encerramentoAutomatico;
+
+    @Column(name = "consistencia_automatica")
+    private Boolean consistenciaAutomatica;
+
     @OneToMany(mappedBy = "execucao", cascade = CascadeType.ALL, orphanRemoval = true)
     @OrderBy("lojaId, tipo")
     private List<ResultadoVerificacao> resultados = new ArrayList<>();
 
+    @OneToMany(mappedBy = "execucao", cascade = CascadeType.ALL, orphanRemoval = true)
+    @OrderBy("lojaId, id")
+    private List<NfceNaoTransmitida> nfceNaoTransmitidas = new ArrayList<>();
+
     public void adicionar(ResultadoVerificacao resultado) {
         resultado.setExecucao(this);
         resultados.add(resultado);
+    }
+
+    public void adicionar(NfceNaoTransmitida nfce) {
+        nfce.setExecucao(this);
+        nfceNaoTransmitidas.add(nfce);
     }
 
     /** Lojas com pelo menos uma verificação falhando. */

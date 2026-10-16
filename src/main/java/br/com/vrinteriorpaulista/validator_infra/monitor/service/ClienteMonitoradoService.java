@@ -108,7 +108,10 @@ public class ClienteMonitoradoService {
                 c.getUltimoContato(), c.getVersaoAgente(),
                 ultima != null ? ultima.getRecebidoEm() : null,
                 ultima != null ? ultima.totalLojas() : 0,
-                ultima != null ? ultima.lojasComFalha() : 0
+                ultima != null ? ultima.lojasComFalha() : 0,
+                ultima != null ? ultima.getVersaoBanco() : null,
+                ultima != null ? ultima.getEncerramentoAutomatico() : null,
+                ultima != null ? ultima.getConsistenciaAutomatica() : null
         );
     }
 

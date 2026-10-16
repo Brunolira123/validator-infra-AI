@@ -24,13 +24,25 @@ public record ResultadoAgenteRequest(
         @NotNull OffsetDateTime executadoEm,
         @Size(max = 30) String versaoAgente,
         @Size(max = 500) String erro,
+        /** Versão do banco VR (uma só para todas as lojas). Agentes até a 2.0.2 não enviam. */
+        @Size(max = 50) String versaoBanco,
+        Boolean encerramentoAutomatico,
+        Boolean consistenciaAutomatica,
         @NotNull @Valid List<Loja> lojas
 ) {
     public record Loja(
             @NotNull Long lojaId,
             @Size(max = 20) String cnpj,
             @Size(max = 100) String descricao,
-            @NotEmpty @Valid List<Verificacao> verificacoes
+            @NotEmpty @Valid List<Verificacao> verificacoes,
+            /** Só quando a consistência falha: NFC-e de ontem não transmitidas. */
+            @Valid List<NfceNaoTransmitida> nfceNaoTransmitidas
+    ) {}
+
+    public record NfceNaoTransmitida(
+            boolean contingencia,
+            /** Preenchido = rejeitada pela SEFAZ. */
+            @Size(max = 500) String motivoRejeicao
     ) {}
 
     public record Verificacao(

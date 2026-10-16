@@ -1,6 +1,7 @@
 package br.com.vrinteriorpaulista.validator_infra.monitor.dto;
 
 import br.com.vrinteriorpaulista.validator_infra.monitor.entity.Execucao;
+import br.com.vrinteriorpaulista.validator_infra.monitor.entity.NfceNaoTransmitida;
 import br.com.vrinteriorpaulista.validator_infra.monitor.entity.ResultadoVerificacao;
 
 import java.time.LocalDate;
@@ -23,8 +24,12 @@ public record ClienteMonitoradoDetalheResponse(
             String cnpj,
             String descricao,
             boolean ok,
-            List<Verificacao> verificacoes
+            List<Verificacao> verificacoes,
+            /** NFC-e de ontem não transmitidas (só quando a consistência falha). */
+            List<Nfce> nfceNaoTransmitidas
     ) {}
+
+    public record Nfce(boolean contingencia, String motivoRejeicao) {}
 
     public record Verificacao(
             String tipo,
@@ -41,13 +46,20 @@ public record ClienteMonitoradoDetalheResponse(
             porLoja.computeIfAbsent(r.getLojaId(), id -> new ArrayList<>()).add(r);
         }
 
+        Map<Long, List<Nfce>> nfcePorLoja = new LinkedHashMap<>();
+        for (NfceNaoTransmitida n : execucao.getNfceNaoTransmitidas()) {
+            nfcePorLoja.computeIfAbsent(n.getLojaId(), id -> new ArrayList<>())
+                    .add(new Nfce(n.getContingencia(), n.getMotivoRejeicao()));
+        }
+
         return porLoja.values().stream().map(resultados -> {
             ResultadoVerificacao primeiro = resultados.get(0);
             List<Verificacao> verificacoes = resultados.stream()
                     .map(r -> new Verificacao(r.getTipo(), r.getOk(), r.getReferencia(), r.getDetalhe()))
                     .toList();
             return new Loja(primeiro.getLojaId(), primeiro.getLojaCnpj(), primeiro.getLojaDescricao(),
-                    verificacoes.stream().allMatch(Verificacao::ok), verificacoes);
+                    verificacoes.stream().allMatch(Verificacao::ok), verificacoes,
+                    nfcePorLoja.getOrDefault(primeiro.getLojaId(), List.of()));
         }).toList();
     }
 }

@@ -3,6 +3,7 @@ package br.com.vrinteriorpaulista.validator_infra.monitor.service;
 import br.com.vrinteriorpaulista.validator_infra.monitor.dto.ResultadoAgenteRequest;
 import br.com.vrinteriorpaulista.validator_infra.monitor.entity.ClienteMonitorado;
 import br.com.vrinteriorpaulista.validator_infra.monitor.entity.Execucao;
+import br.com.vrinteriorpaulista.validator_infra.monitor.entity.NfceNaoTransmitida;
 import br.com.vrinteriorpaulista.validator_infra.monitor.entity.OrigemExecucao;
 import br.com.vrinteriorpaulista.validator_infra.monitor.entity.PedidoConsulta;
 import br.com.vrinteriorpaulista.validator_infra.monitor.entity.ResultadoVerificacao;
@@ -53,7 +54,10 @@ public class AgenteService {
         execucao.setExecutadoEm(req.executadoEm().toInstant());
         execucao.setRecebidoEm(Instant.now());
         execucao.setVersaoAgente(req.versaoAgente());
-        execucao.setErro(req.erro() == null || req.erro().isBlank() ? null : req.erro().trim());
+        execucao.setErro(vazioComoNulo(req.erro()));
+        execucao.setVersaoBanco(vazioComoNulo(req.versaoBanco()));
+        execucao.setEncerramentoAutomatico(req.encerramentoAutomatico());
+        execucao.setConsistenciaAutomatica(req.consistenciaAutomatica());
         for (ResultadoAgenteRequest.Loja loja : req.lojas()) {
             for (ResultadoAgenteRequest.Verificacao v : loja.verificacoes()) {
                 ResultadoVerificacao r = new ResultadoVerificacao();
@@ -65,6 +69,15 @@ public class AgenteService {
                 r.setReferencia(v.referencia());
                 r.setDetalhe(v.detalhe());
                 execucao.adicionar(r);
+            }
+            if (loja.nfceNaoTransmitidas() != null) {
+                for (ResultadoAgenteRequest.NfceNaoTransmitida n : loja.nfceNaoTransmitidas()) {
+                    NfceNaoTransmitida nfce = new NfceNaoTransmitida();
+                    nfce.setLojaId(loja.lojaId());
+                    nfce.setContingencia(n.contingencia());
+                    nfce.setMotivoRejeicao(vazioComoNulo(n.motivoRejeicao()));
+                    execucao.adicionar(nfce);
+                }
             }
         }
         execucao.setOk(execucao.getErro() == null
@@ -84,6 +97,10 @@ public class AgenteService {
             discord.resultado(cliente, execucao);
         }
         return execucao;
+    }
+
+    private static String vazioComoNulo(String texto) {
+        return texto == null || texto.isBlank() ? null : texto.trim();
     }
 
     private ClienteMonitorado registrarContato(AgenteAutenticado agente, String versaoAgente) {

@@ -113,6 +113,44 @@ class MonitorIntegrationTest {
     }
 
     @Test
+    void guardaVersaoDoBancoAutomaticosENfceNaoTransmitidas() throws Exception {
+        mockMvc.perform(post("/api/monitor/agente/resultados")
+                        .header(HttpHeaders.AUTHORIZATION, agente)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"origem":"AGENDADO","executadoEm":"2026-10-15T07:00:00-03:00","versaoAgente":"2.1.0",
+                                 "versaoBanco":"4.2.10","encerramentoAutomatico":true,"consistenciaAutomatica":false,
+                                 "lojas":[
+                                   {"lojaId":1,"descricao":"LOJA 1","verificacoes":[
+                                     {"tipo":"CONSISTENCIA","ok":false,"referencia":"2026-10-14","detalhe":"Última consistência: 13/10/2026"},
+                                     {"tipo":"ENCERRAMENTO","ok":true,"referencia":"2026-10-15"}],
+                                    "nfceNaoTransmitidas":[
+                                     {"contingencia":true},
+                                     {"contingencia":false,"motivoRejeicao":"539 - Duplicidade de NF-e"}]}
+                                 ]}
+                                """))
+                .andExpect(status().isNoContent());
+
+        mockMvc.perform(get("/api/monitor/clientes/{id}", cliente).header(HttpHeaders.AUTHORIZATION, admin))
+                .andExpect(jsonPath("$.cliente.versaoBanco").value("4.2.10"))
+                .andExpect(jsonPath("$.cliente.encerramentoAutomatico").value(true))
+                .andExpect(jsonPath("$.cliente.consistenciaAutomatica").value(false))
+                .andExpect(jsonPath("$.lojas[0].nfceNaoTransmitidas", hasSize(2)))
+                .andExpect(jsonPath("$.lojas[0].nfceNaoTransmitidas[0].contingencia").value(true))
+                .andExpect(jsonPath("$.lojas[0].nfceNaoTransmitidas[1].motivoRejeicao").value("539 - Duplicidade de NF-e"));
+    }
+
+    @Test
+    void agenteAntigoSemOsCamposNovosContinuaFuncionando() throws Exception {
+        enviarResultado("AGENDADO", null, true);
+
+        mockMvc.perform(get("/api/monitor/clientes/{id}", cliente).header(HttpHeaders.AUTHORIZATION, admin))
+                .andExpect(jsonPath("$.cliente.situacao").value("OK"))
+                .andExpect(jsonPath("$.cliente.versaoBanco").doesNotExist())
+                .andExpect(jsonPath("$.lojas[0].nfceNaoTransmitidas", hasSize(0)));
+    }
+
+    @Test
     void erroDoAgenteAoConsultarOBancoViraFalha() throws Exception {
         mockMvc.perform(post("/api/monitor/agente/resultados")
                         .header(HttpHeaders.AUTHORIZATION, agente)

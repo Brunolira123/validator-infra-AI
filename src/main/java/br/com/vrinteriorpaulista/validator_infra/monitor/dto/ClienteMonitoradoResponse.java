@@ -13,5 +13,9 @@ public record ClienteMonitoradoResponse(
         /** Recebimento da última execução (agendada ou sob demanda). */
         Instant ultimaExecucaoEm,
         long totalLojas,
-        long lojasComFalha
+        long lojasComFalha,
+        /** Da última execução: versão do banco VR e se o encerramento/consistência automáticos estão ligados. */
+        String versaoBanco,
+        Boolean encerramentoAutomatico,
+        Boolean consistenciaAutomatica
 ) {}
