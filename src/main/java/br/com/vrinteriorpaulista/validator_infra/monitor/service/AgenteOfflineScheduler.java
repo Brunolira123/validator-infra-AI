@@ -14,7 +14,8 @@ import java.time.Instant;
 /**
  * Detecta agentes que pararam de reportar (máquina desligada, container parado, sem internet): a falha que
  * o modelo antigo, com o alerta saindo do próprio agente, não tinha como avisar.
- * Um alerta por queda; o "voltou" é enviado no próximo contato do agente (AgenteService).
+ * Verifica na hora cheia (06:00, 07:00...), como a repetição das falhas no agente, e avisa a cada hora
+ * enquanto o agente seguir offline; o "voltou" é enviado no próximo contato do agente (AgenteService).
  */
 @Component
 @Slf4j
@@ -32,11 +33,10 @@ public class AgenteOfflineScheduler {
         this.offlineApos = offlineApos;
     }
 
-    @Scheduled(fixedDelayString = "${app.monitor.verificar-offline-a-cada:PT5M}", initialDelayString = "PT1M")
+    @Scheduled(cron = "${app.monitor.cron-alerta-offline:0 0 * * * *}", zone = "${app.monitor.fuso:America/Sao_Paulo}")
     @Transactional
     public void verificar() {
-        for (ClienteMonitorado c : repo.findByAtivoTrueAndAlertaOfflineEnviadoFalseAndUltimoContatoBefore(
-                Instant.now().minus(offlineApos))) {
+        for (ClienteMonitorado c : repo.findByAtivoTrueAndUltimoContatoBefore(Instant.now().minus(offlineApos))) {
             log.warn("Agente do cliente monitorado {} ({}) sem contato desde {}", c.getId(), c.getNome(), c.getUltimoContato());
             c.setAlertaOfflineEnviado(true);
             discord.agenteOffline(c);

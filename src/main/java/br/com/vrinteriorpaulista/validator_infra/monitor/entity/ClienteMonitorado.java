@@ -39,7 +39,7 @@ public class ClienteMonitorado {
     @Column(name = "versao_agente", length = 30)
     private String versaoAgente;
 
-    /** Já avisou no Discord que o agente está offline: evita repetir o alerta a cada verificação. */
+    /** Já avisou no Discord que o agente está offline: no próximo contato sai o aviso de que voltou. */
     @Column(name = "alerta_offline_enviado", nullable = false)
     private Boolean alertaOfflineEnviado = false;
 

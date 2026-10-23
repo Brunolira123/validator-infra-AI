@@ -29,6 +29,7 @@ import static org.hamcrest.Matchers.startsWith;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -221,7 +222,7 @@ class MonitorIntegrationTest {
     }
 
     @Test
-    void agenteOfflineAlertaUmaVezEAvisaQuandoVolta() throws Exception {
+    void agenteOfflineAlertaACadaVerificacaoEAvisaQuandoVolta() throws Exception {
         ClienteMonitorado c = clienteRepo.findById(cliente).orElseThrow();
         c.setUltimoContato(Instant.now().minus(Duration.ofHours(3)));
         clienteRepo.save(c);
@@ -229,7 +230,7 @@ class MonitorIntegrationTest {
         offlineScheduler.verificar();
         offlineScheduler.verificar();
 
-        verify(discord).agenteOffline(argThat(x -> x.getId() == cliente));
+        verify(discord, times(2)).agenteOffline(argThat(x -> x.getId() == cliente));
         mockMvc.perform(get("/api/monitor/clientes/{id}", cliente).header(HttpHeaders.AUTHORIZATION, admin))
                 .andExpect(jsonPath("$.cliente.situacao").value("OFFLINE"));
 

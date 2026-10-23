@@ -67,8 +67,9 @@ public class DiscordNotifier {
     }
 
     public void agenteOffline(ClienteMonitorado cliente) {
-        enviar("🔌 **%s**: agente sem contato desde %s."
-                .formatted(cliente.getNome(), DATA_HORA.format(cliente.getUltimoContato())));
+        long horas = Duration.between(cliente.getUltimoContato(), Instant.now()).toHours();
+        enviar("🔌 **%s**: agente offline, sem contato desde %s (há %dh)."
+                .formatted(cliente.getNome(), DATA_HORA.format(cliente.getUltimoContato()), horas));
     }
 
     public void agenteVoltou(ClienteMonitorado cliente) {
