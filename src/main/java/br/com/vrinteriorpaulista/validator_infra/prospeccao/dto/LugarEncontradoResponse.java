@@ -13,7 +13,8 @@ import java.util.List;
 /**
  * Lugar achado no Google, para exibir na hora. Nada daqui vai para o banco (termos do Google), só o placeId.
  * fotoUrl é relativa à base da API (/api) e exige o Bearer: o front baixa como blob.
- * prospectId, statusProspect e temperatura vêm preenchidos quando o lugar já foi salvo como prospect.
+ * prospectId, statusProspect e temperatura vêm preenchidos quando o lugar já é prospect de quem buscou (ou para
+ * ADMIN/DIRETORIA). Prospect de outro comercial vem só com deOutroComercial = true, sem id nem status.
  */
 public record LugarEncontradoResponse(
         String placeId,
@@ -30,7 +31,8 @@ public record LugarEncontradoResponse(
         String statusFuncionamento,
         Long prospectId,
         StatusProspect statusProspect,
-        TemperaturaNegociacao temperatura
+        TemperaturaNegociacao temperatura,
+        boolean deOutroComercial
 ) {
     public static final int LARGURA_FOTO = 400;
 
@@ -57,7 +59,8 @@ public record LugarEncontradoResponse(
                 lugar.businessStatus(),
                 null,
                 null,
-                null
+                null,
+                false
         );
     }
 
@@ -65,7 +68,13 @@ public record LugarEncontradoResponse(
     public LugarEncontradoResponse comProspect(Prospect prospect) {
         return new LugarEncontradoResponse(placeId, nome, endereco, latitude, longitude, categorias, fotoUrl, fotoAutor,
                 fotoAutorUrl, googleMapsUrl, rotaUrl, statusFuncionamento,
-                prospect.getId(), prospect.getStatus(), prospect.getTemperatura());
+                prospect.getId(), prospect.getStatus(), prospect.getTemperatura(), false);
+    }
+
+    /** Já é prospect de outro comercial: avisa sem expor os dados do funil dele. */
+    public LugarEncontradoResponse comoDeOutroComercial() {
+        return new LugarEncontradoResponse(placeId, nome, endereco, latitude, longitude, categorias, fotoUrl, fotoAutor,
+                fotoAutorUrl, googleMapsUrl, rotaUrl, statusFuncionamento, null, null, null, true);
     }
 
     private static String rota(String placeId, Double lat, Double lng, String endereco) {

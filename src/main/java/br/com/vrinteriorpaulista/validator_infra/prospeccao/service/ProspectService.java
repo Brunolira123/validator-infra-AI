@@ -20,18 +20,22 @@ import br.com.vrinteriorpaulista.validator_infra.util.CnpjUtils;
 import jakarta.persistence.EntityNotFoundException;
 import jakarta.persistence.criteria.Predicate;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
 import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionTemplate;
 
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 
 /**
  * Funil do prospect de campo: salvar da busca, registrar visita, descartar e LTO (vira Cliente + Levantamento).
@@ -50,6 +54,7 @@ public class ProspectService {
     private final LevantamentoService levantamentoService;
     private final ProspeccaoService prospeccao;
     private final UsuarioLogadoService usuarioLogado;
+    private final TransactionTemplate tx;
 
     public ProspectService(ProspectRepository repo,
                            VisitaProspectRepository visitaRepo,
@@ -57,7 +62,8 @@ public class ProspectService {
                            ClienteService clienteService,
                            LevantamentoService levantamentoService,
                            ProspeccaoService prospeccao,
-                           UsuarioLogadoService usuarioLogado) {
+                           UsuarioLogadoService usuarioLogado,
+                           TransactionTemplate tx) {
         this.repo = repo;
         this.visitaRepo = visitaRepo;
         this.clienteRepo = clienteRepo;
@@ -65,17 +71,54 @@ public class ProspectService {
         this.levantamentoService = levantamentoService;
         this.prospeccao = prospeccao;
         this.usuarioLogado = usuarioLogado;
+        this.tx = tx;
     }
 
     /** Resultado do salvar: o front recebe 201 quando criou e 200 quando o lugar já era prospect. */
     public record Salvo(ProspectResponse prospect, boolean criado) {}
 
     /**
+     * Busca no Google e marca os lugares que já são prospect, com uma query só. Prospect de outro comercial
+     * (para quem não é ADMIN/DIRETORIA) vem só como deOutroComercial, sem id, status nem temperatura.
+     */
+    public PaginaBuscaProspectResponse buscar(String cidade, String uf, List<CategoriaProspeccao> categorias, String pagina) {
+        PaginaBuscaProspectResponse resultado = prospeccao.buscar(cidade, uf, categorias, pagina);
+        if (resultado.lugares().isEmpty()) {
+            return resultado;
+        }
+        List<String> placeIds = resultado.lugares().stream().map(LugarEncontradoResponse::placeId).toList();
+        Map<String, Prospect> salvos = repo.findByPlaceIdIn(placeIds).stream()
+                .collect(Collectors.toMap(Prospect::getPlaceId, Function.identity()));
+
+        List<LugarEncontradoResponse> lugares = resultado.lugares().stream()
+                .map(lugar -> {
+                    Prospect prospect = salvos.get(lugar.placeId());
+                    if (prospect == null) {
+                        return lugar;
+                    }
+                    return podeVer(prospect) ? lugar.comProspect(prospect) : lugar.comoDeOutroComercial();
+                })
+                .toList();
+        return new PaginaBuscaProspectResponse(lugares, resultado.proximaPagina());
+    }
+
+    /**
      * Idempotente por placeId: se já existe e o usuário enxerga, devolve o existente.
      * Se é de outro comercial, 409 (não dá para dois trabalharem o mesmo lugar sem saber).
+     * Dois salvando o mesmo lugar ao mesmo tempo: o segundo bate no unique e também recebe 409.
      */
-    @Transactional
     public Salvo salvar(SalvarProspectRequest req) {
+        try {
+            return tx.execute(status -> salvarNaTransacao(req));
+        } catch (DataIntegrityViolationException e) {
+            if (e.getMessage() == null || !e.getMessage().contains(Prospect.UK_PLACE_ID)) {
+                throw e;
+            }
+            throw new IllegalStateException("Este lugar acabou de ser salvo como prospect. Atualize a busca e tente de novo.");
+        }
+    }
+
+    private Salvo salvarNaTransacao(SalvarProspectRequest req) {
         Prospect existente = repo.findByPlaceIdIncluindoExcluidos(req.placeId()).orElse(null);
         if (existente != null && existente.getExcluidoEm() == null) {
             if (!podeVer(existente)) {
@@ -102,7 +145,7 @@ public class ProspectService {
         p.setStatus(StatusProspect.NOVO);
         p.setResponsavel(usuarioLogado.usuario());
 
-        return new Salvo(ProspectResponse.from(repo.save(p), null), true);
+        return new Salvo(ProspectResponse.from(repo.saveAndFlush(p), null), true);
     }
 
     /** Lista paginada. O Google (Place Details) só é consultado para a página devolvida. */

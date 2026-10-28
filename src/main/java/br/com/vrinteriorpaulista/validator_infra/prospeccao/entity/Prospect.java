@@ -18,12 +18,18 @@ import java.time.LocalDateTime;
  */
 @Entity
 @Table(name = "prospect",
-        uniqueConstraints = @UniqueConstraint(name = "uk_prospect_origem_id_externo", columnNames = {"origem", "id_externo"}),
+        uniqueConstraints = {
+                @UniqueConstraint(name = Prospect.UK_PLACE_ID, columnNames = "place_id"),
+                @UniqueConstraint(name = "uk_prospect_origem_id_externo", columnNames = {"origem", "id_externo"})
+        },
         indexes = @Index(name = "idx_prospect_responsavel", columnList = "responsavel_id, status"))
 @SQLRestriction("excluido_em is null")
 @Getter
 @Setter
 public class Prospect {
+
+    /** Nome fixo para reconhecer a violação quando dois salvam o mesmo lugar ao mesmo tempo. */
+    public static final String UK_PLACE_ID = "uk_prospect_place_id";
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -34,7 +40,7 @@ public class Prospect {
     private OrigemProspect origem;
 
     /** Nulo para prospects que não vêm do Google (ex.: importados do CRM). */
-    @Column(name = "place_id", unique = true, length = 300)
+    @Column(name = "place_id", length = 300)
     private String placeId;
 
     /** ID no sistema de origem (CRM). Único junto com a origem. */

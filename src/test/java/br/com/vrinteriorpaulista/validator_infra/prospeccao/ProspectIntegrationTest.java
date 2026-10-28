@@ -6,11 +6,16 @@ import br.com.vrinteriorpaulista.validator_infra.exception.ServicoIndisponivelEx
 import br.com.vrinteriorpaulista.validator_infra.prospeccao.google.GooglePlacesClient;
 import br.com.vrinteriorpaulista.validator_infra.prospeccao.google.LugarGoogle;
 import br.com.vrinteriorpaulista.validator_infra.prospeccao.google.PaginaGoogle;
+import br.com.vrinteriorpaulista.validator_infra.prospeccao.entity.OrigemProspect;
+import br.com.vrinteriorpaulista.validator_infra.prospeccao.entity.Prospect;
+import br.com.vrinteriorpaulista.validator_infra.prospeccao.repository.ProspectRepository;
+import br.com.vrinteriorpaulista.validator_infra.repository.UsuarioRepository;
 import br.com.vrinteriorpaulista.validator_infra.service.brasilapi.BrasilApiClient;
 import com.jayway.jsonpath.JsonPath;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -24,6 +29,7 @@ import java.util.UUID;
 import java.util.concurrent.ThreadLocalRandom;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.hamcrest.Matchers.hasItem;
 import static org.hamcrest.Matchers.not;
 import static org.mockito.ArgumentMatchers.anyString;
@@ -31,6 +37,7 @@ import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -48,6 +55,12 @@ class ProspectIntegrationTest {
 
     @Autowired
     private JdbcTemplate jdbc;
+
+    @Autowired
+    private ProspectRepository prospectRepo;
+
+    @Autowired
+    private UsuarioRepository usuarioRepo;
 
     @MockitoBean
     private GooglePlacesClient google;
@@ -264,6 +277,54 @@ class ProspectIntegrationTest {
     }
 
     @Test
+    void buscaMostraProspectDeOutroComercialSoComoDeOutroComercial() throws Exception {
+        String placeId = novoPlaceId();
+        long id = idDe(salvar(comercial, placeId));
+        visita(id, "{\"resultado\":\"ATENDEU\",\"temperatura\":\"QUENTE\"}");
+        when(google.buscarTexto(anyString(), isNull())).thenReturn(new PaginaGoogle(List.of(lugar(placeId, "Mercado")), null));
+
+        mockMvc.perform(get("/api/prospeccao/busca").param("cidade", cidade).param("uf", "SP")
+                        .param("categorias", "SUPERMERCADO")
+                        .header(HttpHeaders.AUTHORIZATION, usuario("COMERCIAL")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.lugares[0].deOutroComercial").value(true))
+                .andExpect(jsonPath("$.lugares[0].prospectId").doesNotExist())
+                .andExpect(jsonPath("$.lugares[0].statusProspect").doesNotExist())
+                .andExpect(jsonPath("$.lugares[0].temperatura").doesNotExist());
+
+        mockMvc.perform(get("/api/prospeccao/busca").param("cidade", cidade).param("uf", "SP")
+                        .param("categorias", "SUPERMERCADO")
+                        .header(HttpHeaders.AUTHORIZATION, admin))
+                .andExpect(jsonPath("$.lugares[0].deOutroComercial").value(false))
+                .andExpect(jsonPath("$.lugares[0].prospectId").value(id))
+                .andExpect(jsonPath("$.lugares[0].temperatura").value("QUENTE"));
+    }
+
+    @Test
+    void ltoComCnpjDeClienteArquivadoReativaOMesmoCliente() throws Exception {
+        String cnpj = novoCnpj();
+        String resposta = mockMvc.perform(post("/api/clientes")
+                        .header(HttpHeaders.AUTHORIZATION, admin)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"cnpj\":\"" + cnpj + "\",\"razaoSocial\":\"Antigo Ltda\"}"))
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString();
+        long arquivado = ((Number) JsonPath.read(resposta, "$.id")).longValue();
+        mockMvc.perform(delete("/api/clientes/{id}", arquivado).header(HttpHeaders.AUTHORIZATION, admin))
+                .andExpect(status().isNoContent());
+        when(brasilApi.consultarCnpj(cnpj)).thenReturn(receita(cnpj, true));
+
+        long id = idDe(salvar(comercial, novoPlaceId()));
+        visita(id, "{\"resultado\":\"ATENDEU\",\"temperatura\":\"MORNA\"}");
+
+        lto(comercial, id, cnpj).andExpect(status().isOk())
+                .andExpect(jsonPath("$.clienteId").value(arquivado));
+        mockMvc.perform(get("/api/clientes/{id}", arquivado).header(HttpHeaders.AUTHORIZATION, admin))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.razaoSocial").value("Mercado Receita Ltda"));
+    }
+
+    @Test
     void seloDePerfilNaConsultaDeCnpj() throws Exception {
         String cnpj = novoCnpj();
         when(brasilApi.consultarCnpj(cnpj)).thenReturn(receita(cnpj, false));
@@ -289,6 +350,27 @@ class ProspectIntegrationTest {
         assertThat(restricoes).anyMatch(r -> r.contains("'ATENDEU'") && r.contains("'NAO_ATENDEU'"));
         assertThat(restricoes).anyMatch(r -> r.contains("'FRIA'") && r.contains("'MORNA'") && r.contains("'QUENTE'"));
         assertThat(restricoes).anyMatch(r -> r.contains("'SUPERMERCADO'") && r.contains("'BEBIDAS'"));
+    }
+
+    /** O ProspectService reconhece a corrida pelo nome da constraint na mensagem: garante que o Postgres o devolve. */
+    @Test
+    void violacaoDoPlaceIdTrazONomeDaConstraint() {
+        String placeId = novoPlaceId();
+        prospectRepo.saveAndFlush(prospectDireto(placeId));
+
+        assertThatThrownBy(() -> prospectRepo.saveAndFlush(prospectDireto(placeId)))
+                .isInstanceOf(DataIntegrityViolationException.class)
+                .hasMessageContaining(Prospect.UK_PLACE_ID);
+    }
+
+    private Prospect prospectDireto(String placeId) {
+        Prospect p = new Prospect();
+        p.setOrigem(OrigemProspect.GOOGLE);
+        p.setPlaceId(placeId);
+        p.setCidade(cidade);
+        p.setUf("SP");
+        p.setResponsavel(usuarioRepo.findByLogin("admin").orElseThrow());
+        return p;
     }
 
     private ResultActions salvar(String token, String placeId) throws Exception {

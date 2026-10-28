@@ -11,7 +11,6 @@ import br.com.vrinteriorpaulista.validator_infra.prospeccao.google.FotoGoogle;
 import br.com.vrinteriorpaulista.validator_infra.prospeccao.google.GooglePlacesClient;
 import br.com.vrinteriorpaulista.validator_infra.prospeccao.google.LugarGoogle;
 import br.com.vrinteriorpaulista.validator_infra.prospeccao.google.PaginaGoogle;
-import br.com.vrinteriorpaulista.validator_infra.prospeccao.repository.ProspectRepository;
 import jakarta.persistence.EntityNotFoundException;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -42,15 +41,13 @@ import static org.mockito.Mockito.when;
 class ProspeccaoServiceTest {
 
     private GooglePlacesClient google;
-    private ProspectRepository prospectRepo;
     private ProspeccaoService service;
 
     @BeforeEach
     void setUp() {
         google = mock(GooglePlacesClient.class);
-        prospectRepo = mock(ProspectRepository.class);
         CotaDiariaGoogle cota = new CotaDiariaGoogle(100, 2, 1, Clock.systemUTC());
-        service = new ProspeccaoService(google, cota, JsonMapper.builder().build(), prospectRepo);
+        service = new ProspeccaoService(google, cota, JsonMapper.builder().build());
     }
 
     @AfterEach
@@ -136,18 +133,6 @@ class ProspeccaoServiceTest {
         assertThat(lugar.rotaUrl())
                 .isEqualTo("https://www.google.com/maps/dir/?api=1&destination=-22.5%2C-47.4&destination_place_id=p1");
         assertThat(lugar.prospectId()).isNull();
-    }
-
-    @Test
-    void buscaMarcaLugaresQueJaSaoProspect() {
-        when(google.buscarTexto(anyString(), any())).thenReturn(new PaginaGoogle(List.of(lugar("p1"), lugar("p2")), null));
-        when(prospectRepo.findByPlaceIdIn(any())).thenReturn(List.of(prospect(7L, "p2", StatusProspect.VISITADO)));
-
-        List<LugarEncontradoResponse> lugares = service.buscar("Limeira", "SP", List.of(PADARIA), null).lugares();
-
-        assertThat(lugares.get(0).prospectId()).isNull();
-        assertThat(lugares.get(1).prospectId()).isEqualTo(7L);
-        assertThat(lugares.get(1).statusProspect()).isEqualTo(StatusProspect.VISITADO);
     }
 
     @Test

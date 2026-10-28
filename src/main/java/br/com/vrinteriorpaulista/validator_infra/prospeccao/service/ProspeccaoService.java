@@ -10,7 +10,6 @@ import br.com.vrinteriorpaulista.validator_infra.prospeccao.google.FotoGoogle;
 import br.com.vrinteriorpaulista.validator_infra.prospeccao.google.GooglePlacesClient;
 import br.com.vrinteriorpaulista.validator_infra.prospeccao.google.LugarGoogle;
 import br.com.vrinteriorpaulista.validator_infra.prospeccao.google.PaginaGoogle;
-import br.com.vrinteriorpaulista.validator_infra.prospeccao.repository.ProspectRepository;
 import com.github.benmanes.caffeine.cache.Cache;
 import com.github.benmanes.caffeine.cache.Caffeine;
 import jakarta.annotation.PreDestroy;
@@ -27,9 +26,7 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
-import java.util.function.Function;
 import java.util.regex.Pattern;
-import java.util.stream.Collectors;
 
 /**
  * Busca de comércios de alimentos no Google: uma query por categoria, resultados juntos e sem duplicados.
@@ -50,7 +47,6 @@ public class ProspeccaoService {
     private final GooglePlacesClient google;
     private final CotaDiariaGoogle cota;
     private final ObjectMapper objectMapper;
-    private final ProspectRepository prospectRepo;
 
     private final Cache<ChaveBusca, PaginaGoogle> cacheBusca = Caffeine.newBuilder()
             .expireAfterWrite(VALIDADE_CACHE)
@@ -74,12 +70,10 @@ public class ProspeccaoService {
         return t;
     });
 
-    public ProspeccaoService(GooglePlacesClient google, CotaDiariaGoogle cota, ObjectMapper objectMapper,
-                             ProspectRepository prospectRepo) {
+    public ProspeccaoService(GooglePlacesClient google, CotaDiariaGoogle cota, ObjectMapper objectMapper) {
         this.google = google;
         this.cota = cota;
         this.objectMapper = objectMapper;
-        this.prospectRepo = prospectRepo;
     }
 
     @PreDestroy
@@ -90,6 +84,7 @@ public class ProspeccaoService {
     /**
      * @param categorias vazio ou null = todas
      * @param pagina     token de "carregar mais" devolvido em proximaPagina; quando vem, manda nas categorias
+     * @return lugares ainda sem a marcação de prospect (feita pelo ProspectService, que sabe quem enxerga o quê)
      */
     public PaginaBuscaProspectResponse buscar(String cidade, String uf, List<CategoriaProspeccao> categorias, String pagina) {
         String cidadeLimpa = cidade == null ? "" : cidade.trim();
@@ -130,15 +125,8 @@ public class ProspeccaoService {
             }
         }
 
-        // Uma query só para marcar os lugares que já são prospect
-        Map<String, Prospect> salvos = lugares.isEmpty() ? Map.of() : prospectRepo.findByPlaceIdIn(lugares.keySet()).stream()
-                .collect(Collectors.toMap(Prospect::getPlaceId, Function.identity()));
         List<LugarEncontradoResponse> resposta = lugares.values().stream()
-                .map(l -> {
-                    LugarEncontradoResponse lugar = LugarEncontradoResponse.from(l, List.copyOf(categoriasPorLugar.get(l.id())));
-                    Prospect prospect = salvos.get(l.id());
-                    return prospect != null ? lugar.comProspect(prospect) : lugar;
-                })
+                .map(l -> LugarEncontradoResponse.from(l, List.copyOf(categoriasPorLugar.get(l.id()))))
                 .toList();
         return new PaginaBuscaProspectResponse(resposta, proximas.isEmpty() ? null : codificarPagina(proximas));
     }

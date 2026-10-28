@@ -44,7 +44,7 @@ public class ProspeccaoController {
                                               @RequestParam String uf,
                                               @RequestParam(required = false) List<CategoriaProspeccao> categorias,
                                               @RequestParam(required = false) String pagina) {
-        return service.buscar(cidade, uf, categorias, pagina);
+        return prospects.buscar(cidade, uf, categorias, pagina);
     }
 
     @Operation(summary = "Foto de um lugar (proxy do Google)",
