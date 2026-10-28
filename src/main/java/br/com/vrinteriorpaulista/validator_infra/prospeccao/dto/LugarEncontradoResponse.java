@@ -1,6 +1,9 @@
 package br.com.vrinteriorpaulista.validator_infra.prospeccao.dto;
 
 import br.com.vrinteriorpaulista.validator_infra.prospeccao.entity.CategoriaProspeccao;
+import br.com.vrinteriorpaulista.validator_infra.prospeccao.entity.Prospect;
+import br.com.vrinteriorpaulista.validator_infra.prospeccao.entity.StatusProspect;
+import br.com.vrinteriorpaulista.validator_infra.prospeccao.entity.TemperaturaNegociacao;
 import br.com.vrinteriorpaulista.validator_infra.prospeccao.google.LugarGoogle;
 
 import java.net.URLEncoder;
@@ -26,8 +29,8 @@ public record LugarEncontradoResponse(
         String rotaUrl,
         String statusFuncionamento,
         Long prospectId,
-        String statusProspect,
-        String temperatura
+        StatusProspect statusProspect,
+        TemperaturaNegociacao temperatura
 ) {
     public static final int LARGURA_FOTO = 400;
 
@@ -56,6 +59,13 @@ public record LugarEncontradoResponse(
                 null,
                 null
         );
+    }
+
+    /** Marca o lugar com o prospect salvo (só os dados nossos: id, status e temperatura). */
+    public LugarEncontradoResponse comProspect(Prospect prospect) {
+        return new LugarEncontradoResponse(placeId, nome, endereco, latitude, longitude, categorias, fotoUrl, fotoAutor,
+                fotoAutorUrl, googleMapsUrl, rotaUrl, statusFuncionamento,
+                prospect.getId(), prospect.getStatus(), prospect.getTemperatura());
     }
 
     private static String rota(String placeId, Double lat, Double lng, String endereco) {

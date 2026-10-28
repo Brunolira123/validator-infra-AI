@@ -1,6 +1,6 @@
 package br.com.vrinteriorpaulista.validator_infra.prospeccao.google;
 
-import br.com.vrinteriorpaulista.validator_infra.exception.LimiteDiarioAtingidoException;
+import br.com.vrinteriorpaulista.validator_infra.exception.LimiteExcedidoException;
 import br.com.vrinteriorpaulista.validator_infra.exception.ServicoIndisponivelException;
 import jakarta.persistence.EntityNotFoundException;
 import lombok.extern.slf4j.Slf4j;
@@ -144,7 +144,7 @@ public class GooglePlacesClient {
             throw new IllegalArgumentException("Pedido recusado pelo Google", e);
         } catch (HttpClientErrorException.TooManyRequests e) {
             // Pode ser a cota por minuto do Google Cloud, não só a diária
-            throw new LimiteDiarioAtingidoException(MENSAGEM_COTA_GOOGLE);
+            throw new LimiteExcedidoException(MENSAGEM_COTA_GOOGLE);
         } catch (HttpClientErrorException e) {
             // 401/403: chave inválida, API não ativada ou restrição da chave. Não é culpa do usuário.
             log.error("Google Places recusou a chamada ({}): {}", e.getStatusCode(), e.getResponseBodyAsString());

@@ -1,6 +1,6 @@
 package br.com.vrinteriorpaulista.validator_infra.prospeccao.google;
 
-import br.com.vrinteriorpaulista.validator_infra.exception.LimiteDiarioAtingidoException;
+import br.com.vrinteriorpaulista.validator_infra.exception.LimiteExcedidoException;
 import br.com.vrinteriorpaulista.validator_infra.exception.ServicoIndisponivelException;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -100,10 +100,10 @@ class GooglePlacesClientTest {
     }
 
     @Test
-    void cotaDoGoogleEsgotadaViraLimiteDiario() {
+    void limiteDoGoogleViraLimiteExcedido() {
         servidor.expect(requestTo(BASE + "/places:searchText")).andRespond(withTooManyRequests());
 
-        assertThatThrownBy(() -> client.buscarTexto("x", null)).isInstanceOf(LimiteDiarioAtingidoException.class);
+        assertThatThrownBy(() -> client.buscarTexto("x", null)).isInstanceOf(LimiteExcedidoException.class);
     }
 
     @Test

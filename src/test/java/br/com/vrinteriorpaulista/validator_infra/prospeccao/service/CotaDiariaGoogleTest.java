@@ -1,6 +1,6 @@
 package br.com.vrinteriorpaulista.validator_infra.prospeccao.service;
 
-import br.com.vrinteriorpaulista.validator_infra.exception.LimiteDiarioAtingidoException;
+import br.com.vrinteriorpaulista.validator_infra.exception.LimiteExcedidoException;
 import org.junit.jupiter.api.Test;
 
 import java.time.Clock;
@@ -17,18 +17,29 @@ class CotaDiariaGoogleTest {
 
     @Test
     void buscaAlemDoLimiteDa429() {
-        CotaDiariaGoogle cota = new CotaDiariaGoogle(2, 1, Clock.fixed(Instant.parse("2026-10-28T13:00:00Z"), FUSO));
+        CotaDiariaGoogle cota = new CotaDiariaGoogle(2, 1, 1, Clock.fixed(Instant.parse("2026-10-28T13:00:00Z"), FUSO));
         cota.consumirBusca();
         cota.consumirBusca();
 
         assertThatThrownBy(cota::consumirBusca)
-                .isInstanceOf(LimiteDiarioAtingidoException.class)
+                .isInstanceOf(LimiteExcedidoException.class)
                 .hasMessage(CotaDiariaGoogle.MENSAGEM_BUSCAS);
     }
 
     @Test
+    void detalhesTemContadorProprio() {
+        CotaDiariaGoogle cota = new CotaDiariaGoogle(1, 1, 1, Clock.fixed(Instant.parse("2026-10-28T13:00:00Z"), FUSO));
+        cota.consumirBusca();
+
+        cota.consumirDetalhes();
+        assertThatThrownBy(cota::consumirDetalhes)
+                .isInstanceOf(LimiteExcedidoException.class)
+                .hasMessage(CotaDiariaGoogle.MENSAGEM_DETALHES);
+    }
+
+    @Test
     void fotoAlemDoLimiteSoRecusa() {
-        CotaDiariaGoogle cota = new CotaDiariaGoogle(1, 1, Clock.fixed(Instant.parse("2026-10-28T13:00:00Z"), FUSO));
+        CotaDiariaGoogle cota = new CotaDiariaGoogle(1, 1, 1, Clock.fixed(Instant.parse("2026-10-28T13:00:00Z"), FUSO));
 
         assertThat(cota.tentarConsumirFoto()).isTrue();
         assertThat(cota.tentarConsumirFoto()).isFalse();
@@ -38,14 +49,16 @@ class CotaDiariaGoogleTest {
     void zeraNaMeiaNoiteDeSaoPaulo() {
         // 23:30 em São Paulo (02:30 UTC do dia seguinte): o dia ainda não virou no fuso do Brasil
         RelogioAjustavel relogio = new RelogioAjustavel(Instant.parse("2026-10-29T02:30:00Z"));
-        CotaDiariaGoogle cota = new CotaDiariaGoogle(1, 1, relogio);
+        CotaDiariaGoogle cota = new CotaDiariaGoogle(1, 1, 1, relogio);
         cota.consumirBusca();
         assertThat(cota.tentarConsumirFoto()).isTrue();
-        assertThatThrownBy(cota::consumirBusca).isInstanceOf(LimiteDiarioAtingidoException.class);
+        assertThatThrownBy(cota::consumirBusca).isInstanceOf(LimiteExcedidoException.class);
 
+        cota.consumirDetalhes();
         relogio.avancar(Duration.ofMinutes(31));
 
         cota.consumirBusca();
+        cota.consumirDetalhes();
         assertThat(cota.tentarConsumirFoto()).isTrue();
     }
 

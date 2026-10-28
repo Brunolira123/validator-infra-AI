@@ -168,7 +168,7 @@ Copie `.env.example` para `.env` e preencha:
 | `JWT_SECRET` | Segredo de assinatura dos JWT, com no mínimo 32 caracteres. Gere com `openssl rand -hex 32` |
 | `DB_HOST`, `DB_PORT` | Só para rodar sem Docker. Padrão `localhost:5432`. O Compose ignora esses valores para a aplicação |
 | `GOOGLE_PLACES_API_KEY` | Opcional. Chave da Places API (New) para a busca de prospects do comercial. Vazio desliga a busca |
-| `GOOGLE_PLACES_LIMITE_BUSCAS`, `GOOGLE_PLACES_LIMITE_FOTOS` | Opcional. Trava diária de chamadas ao Google (padrão 150 e 30). Só cache miss conta; cada categoria da busca é uma chamada |
+| `GOOGLE_PLACES_LIMITE_BUSCAS`, `GOOGLE_PLACES_LIMITE_DETALHES`, `GOOGLE_PLACES_LIMITE_FOTOS` | Opcional. Trava diária de chamadas ao Google (padrão 150, 150 e 30). Só cache miss conta; cada categoria da busca é uma chamada, e os detalhes são os dados do Google dos prospects salvos |
 | `FOTOS_PATH` | Opcional. Pasta das fotos. Padrão `./storage/fotos` (no Docker, `/app/storage/fotos`, num volume) |
 
 O `.env` não deve ser versionado. O Compose o lê automaticamente, e a aplicação também o carrega ao rodar fora do Docker.

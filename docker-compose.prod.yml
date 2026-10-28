@@ -51,6 +51,7 @@ services:
       # Busca de prospects (Google Places). Vazio desliga a busca.
       GOOGLE_PLACES_API_KEY: ${GOOGLE_PLACES_API_KEY:-}
       GOOGLE_PLACES_LIMITE_BUSCAS: ${GOOGLE_PLACES_LIMITE_BUSCAS:-150}
+      GOOGLE_PLACES_LIMITE_DETALHES: ${GOOGLE_PLACES_LIMITE_DETALHES:-150}
       GOOGLE_PLACES_LIMITE_FOTOS: ${GOOGLE_PLACES_LIMITE_FOTOS:-30}
     volumes:
       - fotos:/app/storage/fotos

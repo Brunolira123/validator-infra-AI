@@ -1,7 +1,7 @@
 package br.com.vrinteriorpaulista.validator_infra.controller.exception;
 
 import br.com.vrinteriorpaulista.validator_infra.dto.response.ErroResponse;
-import br.com.vrinteriorpaulista.validator_infra.exception.LimiteDiarioAtingidoException;
+import br.com.vrinteriorpaulista.validator_infra.exception.LimiteExcedidoException;
 import br.com.vrinteriorpaulista.validator_infra.exception.ServicoIndisponivelException;
 import br.com.vrinteriorpaulista.validator_infra.security.JsonSecurityErrorHandler;
 import jakarta.persistence.EntityNotFoundException;
@@ -51,9 +51,9 @@ public class GlobalExceptionHandler {
         return erro(HttpStatus.SERVICE_UNAVAILABLE, ex.getMessage(), req, null);
     }
 
-    @ExceptionHandler(LimiteDiarioAtingidoException.class)
-    public ResponseEntity<ErroResponse> limiteDiario(LimiteDiarioAtingidoException ex, HttpServletRequest req) {
-        log.warn("Limite diário atingido em {} {}: {}", req.getMethod(), req.getRequestURI(), ex.getMessage());
+    @ExceptionHandler(LimiteExcedidoException.class)
+    public ResponseEntity<ErroResponse> limiteExcedido(LimiteExcedidoException ex, HttpServletRequest req) {
+        log.warn("Limite de uso atingido em {} {}: {}", req.getMethod(), req.getRequestURI(), ex.getMessage());
         return erro(HttpStatus.TOO_MANY_REQUESTS, ex.getMessage(), req, null);
     }
 

@@ -1,12 +1,17 @@
 package br.com.vrinteriorpaulista.validator_infra.prospeccao.service;
 
+import br.com.vrinteriorpaulista.validator_infra.entity.Usuario;
+import br.com.vrinteriorpaulista.validator_infra.exception.ServicoIndisponivelException;
 import br.com.vrinteriorpaulista.validator_infra.prospeccao.dto.LugarEncontradoResponse;
 import br.com.vrinteriorpaulista.validator_infra.prospeccao.dto.PaginaBuscaProspectResponse;
 import br.com.vrinteriorpaulista.validator_infra.prospeccao.entity.CategoriaProspeccao;
+import br.com.vrinteriorpaulista.validator_infra.prospeccao.entity.Prospect;
+import br.com.vrinteriorpaulista.validator_infra.prospeccao.entity.StatusProspect;
 import br.com.vrinteriorpaulista.validator_infra.prospeccao.google.FotoGoogle;
 import br.com.vrinteriorpaulista.validator_infra.prospeccao.google.GooglePlacesClient;
 import br.com.vrinteriorpaulista.validator_infra.prospeccao.google.LugarGoogle;
 import br.com.vrinteriorpaulista.validator_infra.prospeccao.google.PaginaGoogle;
+import br.com.vrinteriorpaulista.validator_infra.prospeccao.repository.ProspectRepository;
 import jakarta.persistence.EntityNotFoundException;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -15,6 +20,8 @@ import tools.jackson.databind.json.JsonMapper;
 
 import java.time.Clock;
 import java.util.List;
+import java.util.Map;
+import java.util.Optional;
 
 import static br.com.vrinteriorpaulista.validator_infra.prospeccao.entity.CategoriaProspeccao.ACOUGUE;
 import static br.com.vrinteriorpaulista.validator_infra.prospeccao.entity.CategoriaProspeccao.PADARIA;
@@ -35,13 +42,15 @@ import static org.mockito.Mockito.when;
 class ProspeccaoServiceTest {
 
     private GooglePlacesClient google;
+    private ProspectRepository prospectRepo;
     private ProspeccaoService service;
 
     @BeforeEach
     void setUp() {
         google = mock(GooglePlacesClient.class);
-        CotaDiariaGoogle cota = new CotaDiariaGoogle(100, 1, Clock.systemUTC());
-        service = new ProspeccaoService(google, cota, JsonMapper.builder().build());
+        prospectRepo = mock(ProspectRepository.class);
+        CotaDiariaGoogle cota = new CotaDiariaGoogle(100, 2, 1, Clock.systemUTC());
+        service = new ProspeccaoService(google, cota, JsonMapper.builder().build(), prospectRepo);
     }
 
     @AfterEach
@@ -130,6 +139,60 @@ class ProspeccaoServiceTest {
     }
 
     @Test
+    void buscaMarcaLugaresQueJaSaoProspect() {
+        when(google.buscarTexto(anyString(), any())).thenReturn(new PaginaGoogle(List.of(lugar("p1"), lugar("p2")), null));
+        when(prospectRepo.findByPlaceIdIn(any())).thenReturn(List.of(prospect(7L, "p2", StatusProspect.VISITADO)));
+
+        List<LugarEncontradoResponse> lugares = service.buscar("Limeira", "SP", List.of(PADARIA), null).lugares();
+
+        assertThat(lugares.get(0).prospectId()).isNull();
+        assertThat(lugares.get(1).prospectId()).isEqualTo(7L);
+        assertThat(lugares.get(1).statusProspect()).isEqualTo(StatusProspect.VISITADO);
+    }
+
+    @Test
+    void detalhesUsaCacheEContaSoCacheMiss() {
+        when(google.detalhes("p1")).thenReturn(Optional.of(lugar("p1")));
+
+        Map<Long, LugarEncontradoResponse> primeira = service.lugaresDosProspects(List.of(prospect(1L, "p1", StatusProspect.NOVO)));
+        Map<Long, LugarEncontradoResponse> segunda = service.lugaresDosProspects(List.of(prospect(1L, "p1", StatusProspect.NOVO)));
+
+        assertThat(primeira.get(1L).nome()).isEqualTo("Lugar p1");
+        assertThat(segunda.get(1L).nome()).isEqualTo("Lugar p1");
+        verify(google, times(1)).detalhes("p1");
+    }
+
+    @Test
+    void detalhesIndisponivelOuCotaEstouradaNaoDerrubaALista() {
+        when(google.detalhes("ok1")).thenReturn(Optional.of(lugar("ok1")));
+        when(google.detalhes("ok2")).thenReturn(Optional.of(lugar("ok2")));
+        when(google.detalhes("fora")).thenThrow(new ServicoIndisponivelException("fora do ar", null));
+        when(google.detalhes("sumiu")).thenReturn(Optional.empty());
+
+        // Cota de teste: 2 detalhes por dia. ok1 e ok2 gastam a cota; o terceiro nem vai ao Google.
+        Map<Long, LugarEncontradoResponse> lugares = service.lugaresDosProspects(List.of(
+                prospect(1L, "ok1", StatusProspect.NOVO), prospect(2L, "ok2", StatusProspect.NOVO)));
+        Map<Long, LugarEncontradoResponse> semCota = service.lugaresDosProspects(List.of(
+                prospect(3L, "fora", StatusProspect.NOVO), prospect(4L, "sumiu", StatusProspect.NOVO),
+                prospect(5L, null, StatusProspect.NOVO)));
+
+        assertThat(lugares).containsOnlyKeys(1L, 2L);
+        assertThat(semCota).isEmpty();
+        verify(google, never()).detalhes("fora");
+    }
+
+    @Test
+    void detalhesDeLugarQueSumiuOuGoogleForaDoArFicamDeFora() {
+        when(google.detalhes("fora")).thenThrow(new ServicoIndisponivelException("fora do ar", null));
+        when(google.detalhes("sumiu")).thenReturn(Optional.empty());
+
+        Map<Long, LugarEncontradoResponse> lugares = service.lugaresDosProspects(List.of(
+                prospect(3L, "fora", StatusProspect.NOVO), prospect(4L, "sumiu", StatusProspect.NOVO)));
+
+        assertThat(lugares).isEmpty();
+    }
+
+    @Test
     void fotoSoAceitaReferenciaDoGoogle() {
         for (String nome : List.of("https://evil.com/x", "places/p1/photos/../../x", "places/p1/media", "")) {
             assertThatThrownBy(() -> service.foto(nome, 400)).isInstanceOf(IllegalArgumentException.class);
@@ -155,6 +218,16 @@ class ProspeccaoServiceTest {
                 new LugarGoogle.Localizacao(-22.5, -47.4),
                 List.of(new LugarGoogle.Foto("places/" + id + "/photos/f1", List.of(new LugarGoogle.Autor("Ana", "https://maps/ana")))),
                 "OPERATIONAL", "https://maps/" + id);
+    }
+
+    private static Prospect prospect(Long id, String placeId, StatusProspect status) {
+        Prospect p = new Prospect();
+        p.setId(id);
+        p.setPlaceId(placeId);
+        p.setStatus(status);
+        p.setCategoria(PADARIA);
+        p.setResponsavel(new Usuario());
+        return p;
     }
 
     private static LugarGoogle fechado(String id) {

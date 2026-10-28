@@ -8,5 +8,7 @@ public record CnpjResponseDTO(
         String cidade,
         String uf,
         String telefone,
-        String email
+        String email,
+        /** Selo do público-alvo (Lucro Real). Só informativo: nada é bloqueado por ele. */
+        PerfilTributarioDTO perfil
 ) {}

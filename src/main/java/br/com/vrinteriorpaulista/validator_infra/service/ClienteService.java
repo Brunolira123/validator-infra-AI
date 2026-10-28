@@ -3,6 +3,7 @@ package br.com.vrinteriorpaulista.validator_infra.service;
 import br.com.vrinteriorpaulista.validator_infra.dto.brasilapi.BrasilApiCnpjResponse;
 import br.com.vrinteriorpaulista.validator_infra.dto.request.ClienteRequest;
 import br.com.vrinteriorpaulista.validator_infra.dto.response.CnpjResponseDTO;
+import br.com.vrinteriorpaulista.validator_infra.dto.response.PerfilTributarioDTO;
 import br.com.vrinteriorpaulista.validator_infra.entity.Cliente;
 import br.com.vrinteriorpaulista.validator_infra.entity.Usuario;
 import br.com.vrinteriorpaulista.validator_infra.repository.ClienteRepository;
@@ -100,7 +101,8 @@ public class ClienteService {
                 dados.municipio(),
                 dados.uf(),
                 naoVazio(dados.ddd_telefone_1()),
-                naoVazio(dados.email())
+                naoVazio(dados.email()),
+                PerfilTributarioDTO.from(dados)
         );
     }
 

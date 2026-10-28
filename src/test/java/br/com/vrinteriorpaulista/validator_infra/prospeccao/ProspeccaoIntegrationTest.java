@@ -1,12 +1,13 @@
 package br.com.vrinteriorpaulista.validator_infra.prospeccao;
 
 import br.com.vrinteriorpaulista.validator_infra.config.IntegrationTest;
-import br.com.vrinteriorpaulista.validator_infra.exception.LimiteDiarioAtingidoException;
+import br.com.vrinteriorpaulista.validator_infra.exception.LimiteExcedidoException;
 import br.com.vrinteriorpaulista.validator_infra.exception.ServicoIndisponivelException;
 import br.com.vrinteriorpaulista.validator_infra.prospeccao.google.FotoGoogle;
 import br.com.vrinteriorpaulista.validator_infra.prospeccao.google.GooglePlacesClient;
 import br.com.vrinteriorpaulista.validator_infra.prospeccao.google.LugarGoogle;
 import br.com.vrinteriorpaulista.validator_infra.prospeccao.google.PaginaGoogle;
+import br.com.vrinteriorpaulista.validator_infra.service.brasilapi.BrasilApiClient;
 import com.jayway.jsonpath.JsonPath;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -43,6 +44,10 @@ class ProspeccaoIntegrationTest {
 
     @MockitoBean
     private GooglePlacesClient google;
+
+    /** Não usado aqui: mesmo conjunto de mocks do ProspectIntegrationTest, para reaproveitar o contexto Spring. */
+    @MockitoBean
+    private BrasilApiClient brasilApi;
 
     private String admin;
     private String cidade;
@@ -102,7 +107,7 @@ class ProspeccaoIntegrationTest {
     @Test
     void limiteDiarioDa429() throws Exception {
         when(google.buscarTexto(anyString(), isNull()))
-                .thenThrow(new LimiteDiarioAtingidoException("Limite diário de buscas atingido, tente amanhã"));
+                .thenThrow(new LimiteExcedidoException("Limite diário de buscas atingido, tente amanhã"));
 
         mockMvc.perform(get("/api/prospeccao/busca").param("cidade", cidade).param("uf", "SP")
                         .param("categorias", "PADARIA")

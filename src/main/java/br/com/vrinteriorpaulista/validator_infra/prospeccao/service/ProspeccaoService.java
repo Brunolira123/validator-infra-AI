@@ -1,16 +1,21 @@
 package br.com.vrinteriorpaulista.validator_infra.prospeccao.service;
 
+import br.com.vrinteriorpaulista.validator_infra.exception.LimiteExcedidoException;
+import br.com.vrinteriorpaulista.validator_infra.exception.ServicoIndisponivelException;
 import br.com.vrinteriorpaulista.validator_infra.prospeccao.dto.LugarEncontradoResponse;
 import br.com.vrinteriorpaulista.validator_infra.prospeccao.dto.PaginaBuscaProspectResponse;
 import br.com.vrinteriorpaulista.validator_infra.prospeccao.entity.CategoriaProspeccao;
+import br.com.vrinteriorpaulista.validator_infra.prospeccao.entity.Prospect;
 import br.com.vrinteriorpaulista.validator_infra.prospeccao.google.FotoGoogle;
 import br.com.vrinteriorpaulista.validator_infra.prospeccao.google.GooglePlacesClient;
 import br.com.vrinteriorpaulista.validator_infra.prospeccao.google.LugarGoogle;
 import br.com.vrinteriorpaulista.validator_infra.prospeccao.google.PaginaGoogle;
+import br.com.vrinteriorpaulista.validator_infra.prospeccao.repository.ProspectRepository;
 import com.github.benmanes.caffeine.cache.Cache;
 import com.github.benmanes.caffeine.cache.Caffeine;
 import jakarta.annotation.PreDestroy;
 import jakarta.persistence.EntityNotFoundException;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import tools.jackson.core.type.TypeReference;
 import tools.jackson.databind.ObjectMapper;
@@ -22,13 +27,16 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.function.Function;
 import java.util.regex.Pattern;
+import java.util.stream.Collectors;
 
 /**
  * Busca de comércios de alimentos no Google: uma query por categoria, resultados juntos e sem duplicados.
  * Tudo que vem do Google fica só em cache de memória por 24h (não pagar a mesma busca duas vezes no dia).
  */
 @Service
+@Slf4j
 public class ProspeccaoService {
 
     private static final Duration VALIDADE_CACHE = Duration.ofHours(24);
@@ -42,10 +50,16 @@ public class ProspeccaoService {
     private final GooglePlacesClient google;
     private final CotaDiariaGoogle cota;
     private final ObjectMapper objectMapper;
+    private final ProspectRepository prospectRepo;
 
     private final Cache<ChaveBusca, PaginaGoogle> cacheBusca = Caffeine.newBuilder()
             .expireAfterWrite(VALIDADE_CACHE)
             .maximumSize(2_000)
+            .build();
+    /** Optional vazio também fica em cache: lugar que sumiu do Google não é consultado de novo no mesmo dia. */
+    private final Cache<String, Optional<LugarGoogle>> cacheDetalhes = Caffeine.newBuilder()
+            .expireAfterWrite(VALIDADE_CACHE)
+            .maximumSize(5_000)
             .build();
     private final Cache<ChaveFoto, FotoGoogle> cacheFotos = Caffeine.newBuilder()
             .expireAfterWrite(VALIDADE_CACHE)
@@ -53,17 +67,19 @@ public class ProspeccaoService {
             .weigher((ChaveFoto chave, FotoGoogle foto) -> foto.bytes().length)
             .build();
 
-    /** As categorias são consultadas em paralelo: em série, 11 chamadas ao Google levam vários segundos. */
+    /** Categorias e detalhes são consultados em paralelo: em série, 11 ou 20 chamadas ao Google levam vários segundos. */
     private final ExecutorService executor = Executors.newFixedThreadPool(4, r -> {
         Thread t = new Thread(r, "google-places");
         t.setDaemon(true);
         return t;
     });
 
-    public ProspeccaoService(GooglePlacesClient google, CotaDiariaGoogle cota, ObjectMapper objectMapper) {
+    public ProspeccaoService(GooglePlacesClient google, CotaDiariaGoogle cota, ObjectMapper objectMapper,
+                             ProspectRepository prospectRepo) {
         this.google = google;
         this.cota = cota;
         this.objectMapper = objectMapper;
+        this.prospectRepo = prospectRepo;
     }
 
     @PreDestroy
@@ -114,10 +130,59 @@ public class ProspeccaoService {
             }
         }
 
+        // Uma query só para marcar os lugares que já são prospect
+        Map<String, Prospect> salvos = lugares.isEmpty() ? Map.of() : prospectRepo.findByPlaceIdIn(lugares.keySet()).stream()
+                .collect(Collectors.toMap(Prospect::getPlaceId, Function.identity()));
         List<LugarEncontradoResponse> resposta = lugares.values().stream()
-                .map(l -> LugarEncontradoResponse.from(l, List.copyOf(categoriasPorLugar.get(l.id()))))
+                .map(l -> {
+                    LugarEncontradoResponse lugar = LugarEncontradoResponse.from(l, List.copyOf(categoriasPorLugar.get(l.id())));
+                    Prospect prospect = salvos.get(l.id());
+                    return prospect != null ? lugar.comProspect(prospect) : lugar;
+                })
                 .toList();
         return new PaginaBuscaProspectResponse(resposta, proximas.isEmpty() ? null : codificarPagina(proximas));
+    }
+
+    /**
+     * Dados do Google dos prospects de uma página da lista (chamar só para a página exibida, nunca para todos).
+     * Prospect sem placeId, lugar que sumiu do Google, Google fora do ar ou limite diário de detalhes estourado:
+     * fica fora do mapa, e a lista mostra o item só com os dados nossos.
+     *
+     * @return por id do prospect
+     */
+    public Map<Long, LugarEncontradoResponse> lugaresDosProspects(List<Prospect> prospects) {
+        // Lê a entidade aqui, na thread da requisição; as threads do executor só falam com o Google
+        record Pedido(Long id, String placeId, List<CategoriaProspeccao> categorias) {}
+        List<Pedido> pedidos = prospects.stream()
+                .filter(p -> p.getPlaceId() != null)
+                .map(p -> new Pedido(p.getId(), p.getPlaceId(),
+                        p.getCategoria() != null ? List.of(p.getCategoria()) : List.of()))
+                .toList();
+
+        Map<Long, CompletableFuture<Optional<LugarGoogle>>> chamadas = new LinkedHashMap<>();
+        pedidos.forEach(p -> chamadas.put(p.id(), CompletableFuture.supplyAsync(() -> detalhes(p.placeId()), executor)));
+
+        Map<Long, LugarEncontradoResponse> lugares = new HashMap<>();
+        for (Pedido pedido : pedidos) {
+            try {
+                aguardar(chamadas.get(pedido.id()))
+                        .ifPresent(l -> lugares.put(pedido.id(), LugarEncontradoResponse.from(l, pedido.categorias())));
+            } catch (LimiteExcedidoException | ServicoIndisponivelException e) {
+                log.warn("Detalhes do prospect {} indisponíveis: {}", pedido.id(), e.getMessage());
+            } catch (RuntimeException e) {
+                // Qualquer outra falha do Google também não pode derrubar a lista
+                log.error("Erro ao buscar detalhes do prospect {}", pedido.id(), e);
+            }
+        }
+        return lugares;
+    }
+
+    /** Place Details com cache de 24h por placeId; só cache miss conta na cota diária de detalhes. */
+    Optional<LugarGoogle> detalhes(String placeId) {
+        return cacheDetalhes.get(placeId, id -> {
+            cota.consumirDetalhes();
+            return google.detalhes(id);
+        });
     }
 
     /** Proxy da foto (a chave do Google não pode ir para o navegador). Nunca grava em disco. */
@@ -177,7 +242,7 @@ public class ProspeccaoService {
         }
     }
 
-    private static Resultado aguardar(CompletableFuture<Resultado> chamada) {
+    private static <T> T aguardar(CompletableFuture<T> chamada) {
         try {
             return chamada.join();
         } catch (CompletionException e) {
