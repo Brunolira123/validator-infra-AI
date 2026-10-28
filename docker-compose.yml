@@ -33,6 +33,8 @@ services:
       GEMINI_API_KEY: ${GEMINI_API_KEY:?Defina GEMINI_API_KEY no .env}
       JWT_SECRET: ${JWT_SECRET:?Defina JWT_SECRET no .env}
       FOTOS_PATH: /app/storage/fotos
+      # Busca de prospects (Google Places). Vazio desliga a busca.
+      GOOGLE_PLACES_API_KEY: ${GOOGLE_PLACES_API_KEY:-}
       SPRING_JPA_SHOW_SQL: "false"
     ports:
       - "${APP_PORT:-8075}:8075"

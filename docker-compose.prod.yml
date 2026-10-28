@@ -48,6 +48,10 @@ services:
       CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-http://192.168.15.16}
       # Alertas do monitoramento (agentes nos clientes). Vazio desliga os alertas.
       DISCORD_WEBHOOK_URL: ${DISCORD_WEBHOOK_URL:-}
+      # Busca de prospects (Google Places). Vazio desliga a busca.
+      GOOGLE_PLACES_API_KEY: ${GOOGLE_PLACES_API_KEY:-}
+      GOOGLE_PLACES_LIMITE_BUSCAS: ${GOOGLE_PLACES_LIMITE_BUSCAS:-150}
+      GOOGLE_PLACES_LIMITE_FOTOS: ${GOOGLE_PLACES_LIMITE_FOTOS:-30}
     volumes:
       - fotos:/app/storage/fotos
     restart: unless-stopped

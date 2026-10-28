@@ -39,3 +39,6 @@ build/
 
 ### Uploads ###
 storage/
+
+### Rascunhos do Claude Code ###
+Claude outputs/
