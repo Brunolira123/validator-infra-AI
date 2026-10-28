@@ -105,7 +105,8 @@ public class ProspectService {
     /**
      * Idempotente por placeId: se já existe e o usuário enxerga, devolve o existente.
      * Se é de outro comercial, 409 (não dá para dois trabalharem o mesmo lugar sem saber).
-     * Dois salvando o mesmo lugar ao mesmo tempo: o segundo bate no unique e também recebe 409.
+     * Dois salvando o mesmo lugar ao mesmo tempo: o segundo bate no unique e tenta de novo numa transação nova,
+     * que já enxerga o prospect gravado pelo primeiro (mesmo usuário: 200 com o existente; outro comercial: 409).
      */
     public Salvo salvar(SalvarProspectRequest req) {
         try {
@@ -114,7 +115,8 @@ public class ProspectService {
             if (e.getMessage() == null || !e.getMessage().contains(Prospect.UK_PLACE_ID)) {
                 throw e;
             }
-            throw new IllegalStateException("Este lugar acabou de ser salvo como prospect. Atualize a busca e tente de novo.");
+            log.info("Corrida ao salvar o placeId {}: repetindo numa transação nova", req.placeId());
+            return tx.execute(status -> salvarNaTransacao(req));
         }
     }
 
