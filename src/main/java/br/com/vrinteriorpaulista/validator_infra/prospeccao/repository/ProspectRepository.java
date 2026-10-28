@@ -18,8 +18,11 @@ public interface ProspectRepository extends JpaRepository<Prospect, Long>, JpaSp
 
     List<Prospect> findByPlaceIdIn(Collection<String> placeIds);
 
-    /** Inclui excluídos (query nativa não passa pelo @SQLRestriction): o placeId é unique no banco. */
-    @Query(value = "select * from prospect where place_id = :placeId", nativeQuery = true)
+    /**
+     * Inclui excluídos (query nativa não passa pelo @SQLRestriction): o placeId é unique no banco.
+     * Trava a linha até o fim da transação: dois comerciais pegando o mesmo descartado não ganham os dois.
+     */
+    @Query(value = "select * from prospect where place_id = :placeId for update", nativeQuery = true)
     Optional<Prospect> findByPlaceIdIncluindoExcluidos(@Param("placeId") String placeId);
 
     @Override

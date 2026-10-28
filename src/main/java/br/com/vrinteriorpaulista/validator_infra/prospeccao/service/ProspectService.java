@@ -79,7 +79,8 @@ public class ProspectService {
 
     /**
      * Busca no Google e marca os lugares que já são prospect, com uma query só. Prospect de outro comercial
-     * (para quem não é ADMIN/DIRETORIA) vem só como deOutroComercial, sem id, status nem temperatura.
+     * (para quem não é ADMIN/DIRETORIA) vem só como deOutroComercial, sem id, status nem temperatura;
+     * se ele descartou, o lugar vem livre (qualquer um pode salvar e assumir).
      */
     public PaginaBuscaProspectResponse buscar(String cidade, String uf, List<CategoriaProspeccao> categorias, String pagina) {
         PaginaBuscaProspectResponse resultado = prospeccao.buscar(cidade, uf, categorias, pagina);
@@ -96,7 +97,10 @@ public class ProspectService {
                     if (prospect == null) {
                         return lugar;
                     }
-                    return podeVer(prospect) ? lugar.comProspect(prospect) : lugar.comoDeOutroComercial();
+                    if (podeVer(prospect)) {
+                        return lugar.comProspect(prospect);
+                    }
+                    return prospect.getStatus() == StatusProspect.DESCARTADO ? lugar : lugar.comoDeOutroComercial();
                 })
                 .toList();
         return new PaginaBuscaProspectResponse(lugares, resultado.proximaPagina());
@@ -105,6 +109,8 @@ public class ProspectService {
     /**
      * Idempotente por placeId: se já existe e o usuário enxerga, devolve o existente.
      * Se é de outro comercial, 409 (não dá para dois trabalharem o mesmo lugar sem saber).
+     * Descartado volta ao funil como NOVO (201) com quem salvou de responsável, seja o mesmo usuário ou outro;
+     * as visitas antigas ficam no histórico.
      * Dois salvando o mesmo lugar ao mesmo tempo: o segundo bate no unique e tenta de novo numa transação nova,
      * que já enxerga o prospect gravado pelo primeiro (mesmo usuário: 200 com o existente; outro comercial: 409).
      */
@@ -122,6 +128,19 @@ public class ProspectService {
 
     private Salvo salvarNaTransacao(SalvarProspectRequest req) {
         Prospect existente = repo.findByPlaceIdIncluindoExcluidos(req.placeId()).orElse(null);
+        if (existente != null && existente.getExcluidoEm() == null && existente.getStatus() == StatusProspect.DESCARTADO) {
+            Usuario atual = usuarioLogado.usuario();
+            if (!existente.getResponsavel().getId().equals(atual.getId())) {
+                log.info("Prospect descartado {} (placeId {}) transferido de {} para {}", existente.getId(),
+                        existente.getPlaceId(), existente.getResponsavel().getId(), atual.getId());
+            } else {
+                log.info("Prospect descartado {} (placeId {}) reaberto", existente.getId(), existente.getPlaceId());
+            }
+            limparFunil(existente);
+            existente.setStatus(StatusProspect.NOVO);
+            existente.setResponsavel(atual);
+            return new Salvo(ProspectResponse.from(repo.saveAndFlush(existente), null), true);
+        }
         if (existente != null && existente.getExcluidoEm() == null) {
             if (!podeVer(existente)) {
                 throw new IllegalStateException("Este lugar já é prospect de " + existente.getResponsavel().getNome());
@@ -133,10 +152,7 @@ public class ProspectService {
         if (existente != null) {
             log.info("Prospect {} (placeId {}) reativado ao salvar de novo", p.getId(), p.getPlaceId());
             p.setExcluidoEm(null);
-            p.setResultadoVisita(null);
-            p.setTemperatura(null);
-            p.setVisitadoEm(null);
-            p.setObservacao(null);
+            limparFunil(p);
             p.setCliente(null);
         }
         p.setOrigem(OrigemProspect.GOOGLE);
@@ -148,6 +164,14 @@ public class ProspectService {
         p.setResponsavel(usuarioLogado.usuario());
 
         return new Salvo(ProspectResponse.from(repo.saveAndFlush(p), null), true);
+    }
+
+    /** Zera o resultado da última visita; as visitas (prospect_visita) não são apagadas. */
+    private static void limparFunil(Prospect p) {
+        p.setResultadoVisita(null);
+        p.setTemperatura(null);
+        p.setVisitadoEm(null);
+        p.setObservacao(null);
     }
 
     /** Lista paginada. O Google (Place Details) só é consultado para a página devolvida. */

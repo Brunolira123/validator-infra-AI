@@ -232,6 +232,57 @@ class ProspectIntegrationTest {
     }
 
     @Test
+    void descartadoPorUmFicaLivreEOutroAssume() throws Exception {
+        String placeId = novoPlaceId();
+        long id = idDe(salvar(comercial, placeId));
+        visita(id, "{\"resultado\":\"ATENDEU\",\"temperatura\":\"FRIA\",\"observacao\":\"Sem interesse\"}")
+                .andExpect(status().isOk());
+        mockMvc.perform(post("/api/prospeccao/prospects/{id}/descartar", id).header(HttpHeaders.AUTHORIZATION, comercial))
+                .andExpect(status().isOk());
+        String outro = usuario("COMERCIAL");
+
+        when(google.buscarTexto(anyString(), isNull())).thenReturn(new PaginaGoogle(List.of(lugar(placeId, "Mercado")), null));
+        mockMvc.perform(get("/api/prospeccao/busca").param("cidade", cidade).param("uf", "SP")
+                        .param("categorias", "SUPERMERCADO")
+                        .header(HttpHeaders.AUTHORIZATION, outro))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.lugares[0].deOutroComercial").value(false))
+                .andExpect(jsonPath("$.lugares[0].prospectId").doesNotExist());
+
+        salvar(outro, placeId).andExpect(status().isCreated())
+                .andExpect(jsonPath("$.id").value(id))
+                .andExpect(jsonPath("$.status").value("NOVO"))
+                .andExpect(jsonPath("$.resultadoVisita").doesNotExist())
+                .andExpect(jsonPath("$.temperatura").doesNotExist())
+                .andExpect(jsonPath("$.visitadoEm").doesNotExist())
+                .andExpect(jsonPath("$.observacao").doesNotExist());
+
+        mockMvc.perform(get("/api/prospeccao/prospects/{id}", id).header(HttpHeaders.AUTHORIZATION, outro))
+                .andExpect(status().isOk());
+        mockMvc.perform(get("/api/prospeccao/prospects/{id}", id).header(HttpHeaders.AUTHORIZATION, comercial))
+                .andExpect(status().isNotFound());
+        salvar(comercial, placeId).andExpect(status().isConflict());
+        assertThat(jdbc.queryForObject("select count(*) from prospect_visita where prospect_id = ?", Long.class, id))
+                .isEqualTo(1L);
+    }
+
+    @Test
+    void descartadoDoProprioUsuarioReabreComoNovo() throws Exception {
+        String placeId = novoPlaceId();
+        long id = idDe(salvar(comercial, placeId));
+        visita(id, "{\"resultado\":\"NAO_ATENDEU\"}").andExpect(status().isOk());
+        mockMvc.perform(post("/api/prospeccao/prospects/{id}/descartar", id).header(HttpHeaders.AUTHORIZATION, comercial))
+                .andExpect(status().isOk());
+
+        salvar(comercial, placeId).andExpect(status().isCreated())
+                .andExpect(jsonPath("$.id").value(id))
+                .andExpect(jsonPath("$.status").value("NOVO"))
+                .andExpect(jsonPath("$.resultadoVisita").doesNotExist());
+        // Já reaberto: salvar de novo é o idempotente de sempre
+        salvar(comercial, placeId).andExpect(status().isOk());
+    }
+
+    @Test
     void listaTrazLugarDoGoogleOuNullSemQuebrar() throws Exception {
         String comLugar = novoPlaceId();
         String foraDoAr = novoPlaceId();
