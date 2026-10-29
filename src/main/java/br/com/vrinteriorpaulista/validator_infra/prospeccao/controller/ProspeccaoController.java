@@ -69,7 +69,8 @@ public class ProspeccaoController {
     }
 
     @Operation(summary = "Lista os prospects (aba \"Meus prospects\")",
-            description = "COMERCIAL vê só os seus; ADMIN e DIRETORIA veem todos. Paginada (pagina começa em 0, "
+            description = "COMERCIAL vê só os seus; ADMIN e DIRETORIA veem todos. Sem status, os DESCARTADO ficam de "
+                    + "fora (status=DESCARTADO lista eles). Paginada (pagina começa em 0, "
                     + "tamanho até 50). Os dados do Google (lugar) só são buscados para a página devolvida e vêm "
                     + "null quando indisponíveis.")
     @GetMapping("/prospects")
@@ -115,8 +116,8 @@ public class ProspeccaoController {
     }
 
     @Operation(summary = "Marca a negociação como perdida",
-            description = "Só para prospect VISITADO (senão 409). O lugar fica livre para outro comercial, como o "
-                    + "descartado, e pode receber nova visita.")
+            description = "Só para prospect VISITADO em que o cliente atendeu (senão 409). O lugar fica livre para "
+                    + "outro comercial, como o descartado, e pode receber nova visita.")
     @PostMapping("/prospects/{id}/perder")
     public ProspectResponse perder(@PathVariable Long id, @RequestBody @Valid PerderProspectRequest req) {
         return prospects.perder(id, req);

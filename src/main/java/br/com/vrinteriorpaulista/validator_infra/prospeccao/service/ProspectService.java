@@ -195,7 +195,10 @@ public class ProspectService {
         return p.getStatus() == StatusProspect.DESCARTADO || p.getStatus() == StatusProspect.PERDIDO;
     }
 
-    /** Lista paginada. O Google (Place Details) só é consultado para a página devolvida. */
+    /**
+     * Lista paginada; sem filtro de status, os descartados ficam de fora.
+     * O Google (Place Details) só é consultado para a página devolvida.
+     */
     public PaginaProspectsResponse listar(String cidade, String uf, StatusProspect status,
                                          TemperaturaNegociacao temperatura, int pagina, int tamanho) {
         UsuarioAutenticado atual = usuarioLogado.atual();
@@ -212,6 +215,8 @@ public class ProspectService {
             }
             if (status != null) {
                 condicoes.add(cb.equal(root.get("status"), status));
+            } else {
+                condicoes.add(cb.notEqual(root.get("status"), StatusProspect.DESCARTADO));
             }
             if (temperatura != null) {
                 condicoes.add(cb.equal(root.get("temperatura"), temperatura));
@@ -334,12 +339,15 @@ public class ProspectService {
         }
     }
 
-    /** Negociação perdida depois da visita. Fica livre para outro comercial, como o descartado. */
+    /**
+     * Negociação perdida depois de uma visita em que o cliente atendeu.
+     * Fica livre para outro comercial, como o descartado.
+     */
     @Transactional
     public ProspectResponse perder(Long id, PerderProspectRequest req) {
         Prospect p = buscarVisivel(id);
-        if (p.getStatus() != StatusProspect.VISITADO) {
-            throw new IllegalStateException("Só prospect visitado pode ser marcado como perdido");
+        if (p.getStatus() != StatusProspect.VISITADO || p.getResultadoVisita() != ResultadoVisita.ATENDEU) {
+            throw new IllegalStateException("Perdido só depois de uma visita em que o cliente atendeu");
         }
         p.setStatus(StatusProspect.PERDIDO);
         p.setMotivoPerda(req.motivo());

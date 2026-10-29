@@ -327,6 +327,34 @@ class ProspectIntegrationTest {
     }
 
     @Test
+    void perderDepoisDeNaoAtendeuDa409() throws Exception {
+        long id = idDe(salvar(comercial, novoPlaceId()));
+        visita(id, "{\"resultado\":\"NAO_ATENDEU\"}").andExpect(status().isOk());
+
+        perder(id, "{\"motivo\":\"SEM_INTERESSE\"}").andExpect(status().isConflict());
+    }
+
+    @Test
+    void listaSemStatusEscondeDescartadosEComStatusDescartadoMostra() throws Exception {
+        long ativo = idDe(salvar(comercial, novoPlaceId()));
+        long descartado = idDe(salvar(comercial, novoPlaceId()));
+        mockMvc.perform(post("/api/prospeccao/prospects/{id}/descartar", descartado).header(HttpHeaders.AUTHORIZATION, comercial))
+                .andExpect(status().isOk());
+
+        mockMvc.perform(get("/api/prospeccao/prospects").param("cidade", cidade).header(HttpHeaders.AUTHORIZATION, comercial))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.total").value(1))
+                .andExpect(jsonPath("$.prospects[*].id", hasItem((int) ativo)))
+                .andExpect(jsonPath("$.prospects[*].id", not(hasItem((int) descartado))));
+        mockMvc.perform(get("/api/prospeccao/prospects").param("cidade", cidade).param("status", "DESCARTADO")
+                        .header(HttpHeaders.AUTHORIZATION, comercial))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.total").value(1))
+                .andExpect(jsonPath("$.prospects[0].id").value(descartado))
+                .andExpect(jsonPath("$.prospects[0].status").value("DESCARTADO"));
+    }
+
+    @Test
     void perdidoFicaLivreParaOutroComercial() throws Exception {
         String placeId = novoPlaceId();
         long id = idDe(salvar(comercial, placeId));
