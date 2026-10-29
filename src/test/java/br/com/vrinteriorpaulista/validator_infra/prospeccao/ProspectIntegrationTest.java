@@ -23,6 +23,7 @@ import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.ResultActions;
 
+import java.time.LocalDate;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -34,7 +35,7 @@ import static org.hamcrest.Matchers.hasItem;
 import static org.hamcrest.Matchers.not;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.isNull;
-import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
@@ -44,7 +45,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 /**
- * Funil do prospect: salvar, visita, descarte, LTO e visibilidade por usuário. Google e BrasilAPI mockados.
+ * Funil do prospect: salvar, visita, fechamento, perda, LTO, descarte e visibilidade por usuário. Google e BrasilAPI mockados.
  * Cada teste usa placeId, cidade e CNPJ próprios porque o banco e os caches são compartilhados pelo contexto.
  */
 @IntegrationTest
@@ -147,70 +148,149 @@ class ProspectIntegrationTest {
     }
 
     @Test
-    void ltoAntesDaVisitaDa409() throws Exception {
+    void fecharAntesDaVisitaDa409() throws Exception {
         long id = idDe(salvar(comercial, novoPlaceId()));
 
-        lto(comercial, id, novoCnpj()).andExpect(status().isConflict());
+        fechar(comercial, id, novoCnpj()).andExpect(status().isConflict());
     }
 
     @Test
-    void ltoDepoisDeNaoAtendeuDa409() throws Exception {
+    void fecharDepoisDeNaoAtendeuDa409() throws Exception {
         long id = idDe(salvar(comercial, novoPlaceId()));
         visita(id, "{\"resultado\":\"NAO_ATENDEU\"}");
 
-        lto(comercial, id, novoCnpj()).andExpect(status().isConflict());
+        fechar(comercial, id, novoCnpj()).andExpect(status().isConflict());
     }
 
     @Test
-    void ltoCriaClienteComDadosDaReceitaELevantamento() throws Exception {
+    void fecharCriaClienteComDadosDaReceita() throws Exception {
         long id = idDe(salvar(comercial, novoPlaceId()));
         visita(id, "{\"resultado\":\"ATENDEU\",\"temperatura\":\"MORNA\"}");
         String cnpj = novoCnpj();
         when(brasilApi.consultarCnpj(cnpj)).thenReturn(receita(cnpj, true));
 
-        String resposta = lto(comercial, id, cnpj).andExpect(status().isOk())
+        String resposta = fechar(comercial, id, cnpj).andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("FECHADO"))
+                .andExpect(jsonPath("$.fechadoEm").value(LocalDate.now().toString()))
+                .andExpect(jsonPath("$.perfil.foraDoPerfil").value(false))
                 .andReturn().getResponse().getContentAsString();
         long clienteId = ((Number) JsonPath.read(resposta, "$.clienteId")).longValue();
-        long levantamentoId = ((Number) JsonPath.read(resposta, "$.levantamentoId")).longValue();
 
         mockMvc.perform(get("/api/clientes/{id}", clienteId).header(HttpHeaders.AUTHORIZATION, admin))
                 .andExpect(jsonPath("$.cnpj").value(cnpj))
                 .andExpect(jsonPath("$.razaoSocial").value("Mercado Receita Ltda"));
+        mockMvc.perform(get("/api/prospeccao/prospects/{id}", id).header(HttpHeaders.AUTHORIZATION, comercial))
+                .andExpect(jsonPath("$.status").value("FECHADO"))
+                .andExpect(jsonPath("$.clienteId").value(clienteId));
+        assertThat(jdbc.queryForObject("select count(*) from levantamento where cliente_id = ?", Long.class, clienteId))
+                .isZero();
+
+        // Contrato fechado não volta atrás
+        visita(id, "{\"resultado\":\"NAO_ATENDEU\"}").andExpect(status().isConflict());
+        mockMvc.perform(post("/api/prospeccao/prospects/{id}/descartar", id).header(HttpHeaders.AUTHORIZATION, comercial))
+                .andExpect(status().isConflict());
+        perder(id, "{\"motivo\":\"PRECO\"}").andExpect(status().isConflict());
+    }
+
+    @Test
+    void fecharComCnpjJaCadastradoReaproveitaOCliente() throws Exception {
+        String cnpj = novoCnpj();
+        long clienteExistente = clienteCadastrado(cnpj, "Já Cadastrado Ltda");
+        when(brasilApi.consultarCnpj(cnpj)).thenReturn(receita(cnpj, false));
+
+        long id = idDe(salvar(comercial, novoPlaceId()));
+        visita(id, "{\"resultado\":\"ATENDEU\",\"temperatura\":\"FRIA\"}");
+
+        mockMvc.perform(post("/api/prospeccao/prospects/{id}/fechar", id)
+                        .header(HttpHeaders.AUTHORIZATION, comercial)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"cnpj":"%s","dataFechamento":"2026-10-01","observacao":"Assinou na loja"}
+                                """.formatted(cnpj)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.clienteId").value(clienteExistente))
+                .andExpect(jsonPath("$.fechadoEm").value("2026-10-01"))
+                .andExpect(jsonPath("$.observacao").value("Assinou na loja"))
+                .andExpect(jsonPath("$.perfil.foraDoPerfil").value(true))
+                .andExpect(jsonPath("$.perfil.motivo").value("Lucro presumido em 2025"));
+        // Só para o selo: o cliente já cadastrado não é sobrescrito com a Receita
+        verify(brasilApi, times(1)).consultarCnpj(cnpj);
+        mockMvc.perform(get("/api/clientes/{id}", clienteExistente).header(HttpHeaders.AUTHORIZATION, admin))
+                .andExpect(jsonPath("$.razaoSocial").value("Já Cadastrado Ltda"));
+    }
+
+    @Test
+    void fecharComClienteCadastradoEReceitaForaDoArVemSemPerfil() throws Exception {
+        String cnpj = novoCnpj();
+        long clienteExistente = clienteCadastrado(cnpj, "Já Cadastrado Ltda");
+        when(brasilApi.consultarCnpj(cnpj)).thenThrow(new ServicoIndisponivelException("BrasilAPI indisponível", null));
+
+        long id = idDe(salvar(comercial, novoPlaceId()));
+        visita(id, "{\"resultado\":\"ATENDEU\",\"temperatura\":\"FRIA\"}");
+
+        fechar(comercial, id, cnpj).andExpect(status().isOk())
+                .andExpect(jsonPath("$.clienteId").value(clienteExistente))
+                .andExpect(jsonPath("$.perfil").doesNotExist());
+    }
+
+    @Test
+    void fecharComCnpjDeClienteArquivadoReativaOMesmoCliente() throws Exception {
+        String cnpj = novoCnpj();
+        long arquivado = clienteCadastrado(cnpj, "Antigo Ltda");
+        mockMvc.perform(delete("/api/clientes/{id}", arquivado).header(HttpHeaders.AUTHORIZATION, admin))
+                .andExpect(status().isNoContent());
+        when(brasilApi.consultarCnpj(cnpj)).thenReturn(receita(cnpj, true));
+
+        long id = idDe(salvar(comercial, novoPlaceId()));
+        visita(id, "{\"resultado\":\"ATENDEU\",\"temperatura\":\"MORNA\"}");
+
+        fechar(comercial, id, cnpj).andExpect(status().isOk())
+                .andExpect(jsonPath("$.clienteId").value(arquivado));
+        mockMvc.perform(get("/api/clientes/{id}", arquivado).header(HttpHeaders.AUTHORIZATION, admin))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.razaoSocial").value("Mercado Receita Ltda"));
+    }
+
+    @Test
+    void ltoSemFecharDa409() throws Exception {
+        long id = idDe(salvar(comercial, novoPlaceId()));
+        lto(comercial, id).andExpect(status().isConflict());
+
+        visita(id, "{\"resultado\":\"ATENDEU\",\"temperatura\":\"QUENTE\"}");
+        lto(comercial, id).andExpect(status().isConflict());
+    }
+
+    @Test
+    void ltoDepoisDoFechamentoCriaLevantamentoDoCliente() throws Exception {
+        long id = idDe(salvar(comercial, novoPlaceId()));
+        visita(id, "{\"resultado\":\"ATENDEU\",\"temperatura\":\"QUENTE\"}");
+        String cnpj = novoCnpj();
+        when(brasilApi.consultarCnpj(cnpj)).thenReturn(receita(cnpj, true));
+        long clienteId = ((Number) JsonPath.read(fechar(comercial, id, cnpj).andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString(), "$.clienteId")).longValue();
+
+        String resposta = lto(comercial, id).andExpect(status().isOk())
+                .andExpect(jsonPath("$.clienteId").value(clienteId))
+                .andReturn().getResponse().getContentAsString();
+        long levantamentoId = ((Number) JsonPath.read(resposta, "$.levantamentoId")).longValue();
+
         mockMvc.perform(get("/api/levantamentos/{id}", levantamentoId).header(HttpHeaders.AUTHORIZATION, admin))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.clienteId").value(clienteId))
+                .andExpect(jsonPath("$.qtdPdvs").value(3))
                 .andExpect(jsonPath("$.status").value("RASCUNHO"));
         mockMvc.perform(get("/api/prospeccao/prospects/{id}", id).header(HttpHeaders.AUTHORIZATION, comercial))
                 .andExpect(jsonPath("$.status").value("LTO"))
                 .andExpect(jsonPath("$.clienteId").value(clienteId));
 
-        // Depois do LTO não volta atrás
         visita(id, "{\"resultado\":\"NAO_ATENDEU\"}").andExpect(status().isConflict());
         mockMvc.perform(post("/api/prospeccao/prospects/{id}/descartar", id).header(HttpHeaders.AUTHORIZATION, comercial))
                 .andExpect(status().isConflict());
+        lto(comercial, id).andExpect(status().isConflict());
     }
 
     @Test
-    void ltoComCnpjJaCadastradoReaproveitaOCliente() throws Exception {
-        String cnpj = novoCnpj();
-        String resposta = mockMvc.perform(post("/api/clientes")
-                        .header(HttpHeaders.AUTHORIZATION, admin)
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"cnpj\":\"" + cnpj + "\",\"razaoSocial\":\"Já Cadastrado Ltda\"}"))
-                .andExpect(status().isOk())
-                .andReturn().getResponse().getContentAsString();
-        long clienteExistente = ((Number) JsonPath.read(resposta, "$.id")).longValue();
-
-        long id = idDe(salvar(comercial, novoPlaceId()));
-        visita(id, "{\"resultado\":\"ATENDEU\",\"temperatura\":\"FRIA\"}");
-
-        lto(comercial, id, cnpj).andExpect(status().isOk())
-                .andExpect(jsonPath("$.clienteId").value(clienteExistente));
-        verify(brasilApi, never()).consultarCnpj(anyString());
-    }
-
-    @Test
-    void tecnicoNaoFazLto() throws Exception {
+    void tecnicoNaoFechaNemFazLto() throws Exception {
         String tecnico = usuario("TECNICO");
         long id = idDe(salvar(tecnico, novoPlaceId()).andExpect(status().isCreated()));
         mockMvc.perform(post("/api/prospeccao/prospects/{id}/visita", id)
@@ -219,7 +299,70 @@ class ProspectIntegrationTest {
                         .content("{\"resultado\":\"ATENDEU\",\"temperatura\":\"FRIA\"}"))
                 .andExpect(status().isOk());
 
-        lto(tecnico, id, novoCnpj()).andExpect(status().isForbidden());
+        fechar(tecnico, id, novoCnpj()).andExpect(status().isForbidden());
+        lto(tecnico, id).andExpect(status().isForbidden());
+    }
+
+    @Test
+    void perderComMotivoEVisitarDeNovoReabre() throws Exception {
+        long id = idDe(salvar(comercial, novoPlaceId()));
+        perder(id, "{\"motivo\":\"PRECO\"}").andExpect(status().isConflict());
+        visita(id, "{\"resultado\":\"ATENDEU\",\"temperatura\":\"MORNA\"}");
+
+        perder(id, "{}").andExpect(status().isBadRequest());
+        perder(id, "{\"motivo\":\"CONCORRENTE\",\"observacao\":\"Fechou com o concorrente\"}")
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("PERDIDO"))
+                .andExpect(jsonPath("$.motivoPerda").value("CONCORRENTE"))
+                .andExpect(jsonPath("$.observacaoPerda").value("Fechou com o concorrente"));
+        mockMvc.perform(get("/api/prospeccao/prospects").param("cidade", cidade).param("status", "PERDIDO")
+                        .header(HttpHeaders.AUTHORIZATION, comercial))
+                .andExpect(jsonPath("$.prospects[*].id", hasItem((int) id)));
+
+        visita(id, "{\"resultado\":\"ATENDEU\",\"temperatura\":\"QUENTE\"}")
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("VISITADO"))
+                .andExpect(jsonPath("$.motivoPerda").doesNotExist())
+                .andExpect(jsonPath("$.observacaoPerda").doesNotExist());
+    }
+
+    @Test
+    void perdidoFicaLivreParaOutroComercial() throws Exception {
+        String placeId = novoPlaceId();
+        long id = idDe(salvar(comercial, placeId));
+        visita(id, "{\"resultado\":\"ATENDEU\",\"temperatura\":\"FRIA\"}");
+        perder(id, "{\"motivo\":\"SEM_INTERESSE\"}").andExpect(status().isOk());
+        String outro = usuario("COMERCIAL");
+
+        when(google.buscarTexto(anyString(), isNull())).thenReturn(new PaginaGoogle(List.of(lugar(placeId, "Mercado")), null));
+        buscar(outro)
+                .andExpect(jsonPath("$.lugares[0].deOutroComercial").value(false))
+                .andExpect(jsonPath("$.lugares[0].prospectId").doesNotExist());
+
+        salvar(outro, placeId).andExpect(status().isCreated())
+                .andExpect(jsonPath("$.id").value(id))
+                .andExpect(jsonPath("$.status").value("NOVO"))
+                .andExpect(jsonPath("$.resultadoVisita").doesNotExist())
+                .andExpect(jsonPath("$.motivoPerda").doesNotExist());
+        mockMvc.perform(get("/api/prospeccao/prospects/{id}", id).header(HttpHeaders.AUTHORIZATION, comercial))
+                .andExpect(status().isNotFound());
+    }
+
+    @Test
+    void fechadoContinuaDeOutroComercialNaBusca() throws Exception {
+        String placeId = novoPlaceId();
+        long id = idDe(salvar(comercial, placeId));
+        visita(id, "{\"resultado\":\"ATENDEU\",\"temperatura\":\"QUENTE\"}");
+        String cnpj = novoCnpj();
+        when(brasilApi.consultarCnpj(cnpj)).thenReturn(receita(cnpj, true));
+        fechar(comercial, id, cnpj).andExpect(status().isOk());
+        String outro = usuario("COMERCIAL");
+
+        when(google.buscarTexto(anyString(), isNull())).thenReturn(new PaginaGoogle(List.of(lugar(placeId, "Mercado")), null));
+        buscar(outro)
+                .andExpect(jsonPath("$.lugares[0].deOutroComercial").value(true))
+                .andExpect(jsonPath("$.lugares[0].statusProspect").doesNotExist());
+        salvar(outro, placeId).andExpect(status().isConflict());
     }
 
     @Test
@@ -352,30 +495,6 @@ class ProspectIntegrationTest {
     }
 
     @Test
-    void ltoComCnpjDeClienteArquivadoReativaOMesmoCliente() throws Exception {
-        String cnpj = novoCnpj();
-        String resposta = mockMvc.perform(post("/api/clientes")
-                        .header(HttpHeaders.AUTHORIZATION, admin)
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"cnpj\":\"" + cnpj + "\",\"razaoSocial\":\"Antigo Ltda\"}"))
-                .andExpect(status().isOk())
-                .andReturn().getResponse().getContentAsString();
-        long arquivado = ((Number) JsonPath.read(resposta, "$.id")).longValue();
-        mockMvc.perform(delete("/api/clientes/{id}", arquivado).header(HttpHeaders.AUTHORIZATION, admin))
-                .andExpect(status().isNoContent());
-        when(brasilApi.consultarCnpj(cnpj)).thenReturn(receita(cnpj, true));
-
-        long id = idDe(salvar(comercial, novoPlaceId()));
-        visita(id, "{\"resultado\":\"ATENDEU\",\"temperatura\":\"MORNA\"}");
-
-        lto(comercial, id, cnpj).andExpect(status().isOk())
-                .andExpect(jsonPath("$.clienteId").value(arquivado));
-        mockMvc.perform(get("/api/clientes/{id}", arquivado).header(HttpHeaders.AUTHORIZATION, admin))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.razaoSocial").value("Mercado Receita Ltda"));
-    }
-
-    @Test
     void seloDePerfilNaConsultaDeCnpj() throws Exception {
         String cnpj = novoCnpj();
         when(brasilApi.consultarCnpj(cnpj)).thenReturn(receita(cnpj, false));
@@ -396,7 +515,10 @@ class ProspectIntegrationTest {
                 """, String.class);
 
         assertThat(restricoes).contains("UNIQUE (place_id)", "UNIQUE (origem, id_externo)");
-        assertThat(restricoes).anyMatch(r -> r.contains("'NOVO'") && r.contains("'VISITADO'") && r.contains("'LTO'") && r.contains("'DESCARTADO'"));
+        assertThat(restricoes).anyMatch(r -> r.contains("'NOVO'") && r.contains("'VISITADO'") && r.contains("'FECHADO'")
+                && r.contains("'LTO'") && r.contains("'PERDIDO'") && r.contains("'DESCARTADO'"));
+        assertThat(restricoes).anyMatch(r -> r.contains("motivo_perda") && r.contains("'PRECO'") && r.contains("'CONCORRENTE'")
+                && r.contains("'SEM_INTERESSE'") && r.contains("'OUTRO'"));
         assertThat(restricoes).anyMatch(r -> r.contains("'GOOGLE'") && r.contains("'MANUAL'") && r.contains("'CRM'"));
         assertThat(restricoes).anyMatch(r -> r.contains("'ATENDEU'") && r.contains("'NAO_ATENDEU'"));
         assertThat(restricoes).anyMatch(r -> r.contains("'FRIA'") && r.contains("'MORNA'") && r.contains("'QUENTE'"));
@@ -440,13 +562,44 @@ class ProspectIntegrationTest {
                 .content(corpo));
     }
 
-    private ResultActions lto(String token, long id, String cnpj) throws Exception {
+    private ResultActions fechar(String token, long id, String cnpj) throws Exception {
+        return mockMvc.perform(post("/api/prospeccao/prospects/{id}/fechar", id)
+                .header(HttpHeaders.AUTHORIZATION, token)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"cnpj\":\"" + cnpj + "\"}"));
+    }
+
+    private ResultActions perder(long id, String corpo) throws Exception {
+        return mockMvc.perform(post("/api/prospeccao/prospects/{id}/perder", id)
+                .header(HttpHeaders.AUTHORIZATION, comercial)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(corpo));
+    }
+
+    private ResultActions lto(String token, long id) throws Exception {
         return mockMvc.perform(post("/api/prospeccao/prospects/{id}/lto", id)
                 .header(HttpHeaders.AUTHORIZATION, token)
                 .contentType(MediaType.APPLICATION_JSON)
                 .content("""
-                        {"cnpj":"%s","qtdServidores":1,"qtdPdvs":3,"qtdRetaguardas":1,"consultaPreco":false}
-                        """.formatted(cnpj)));
+                        {"qtdServidores":1,"qtdPdvs":3,"qtdRetaguardas":1,"consultaPreco":false}
+                        """));
+    }
+
+    private ResultActions buscar(String token) throws Exception {
+        return mockMvc.perform(get("/api/prospeccao/busca").param("cidade", cidade).param("uf", "SP")
+                        .param("categorias", "SUPERMERCADO")
+                        .header(HttpHeaders.AUTHORIZATION, token))
+                .andExpect(status().isOk());
+    }
+
+    private long clienteCadastrado(String cnpj, String razaoSocial) throws Exception {
+        String resposta = mockMvc.perform(post("/api/clientes")
+                        .header(HttpHeaders.AUTHORIZATION, admin)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"cnpj\":\"" + cnpj + "\",\"razaoSocial\":\"" + razaoSocial + "\"}"))
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString();
+        return ((Number) JsonPath.read(resposta, "$.id")).longValue();
     }
 
     private static long idDe(ResultActions resultado) throws Exception {

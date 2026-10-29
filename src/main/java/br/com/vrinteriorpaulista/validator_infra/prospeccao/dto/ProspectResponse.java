@@ -1,12 +1,15 @@
 package br.com.vrinteriorpaulista.validator_infra.prospeccao.dto;
 
+import br.com.vrinteriorpaulista.validator_infra.dto.response.PerfilTributarioDTO;
 import br.com.vrinteriorpaulista.validator_infra.prospeccao.entity.*;
 
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 
 /**
  * Prospect salvo: dados nossos + "lugar" buscado de novo no Google na hora (termos do Google).
  * lugar vem null quando o lugar sumiu do Google, a busca está fora do ar ou o limite diário de detalhes acabou.
+ * perfil (selo do CNPJ) só vem na resposta do fechamento; não é guardado.
  */
 public record ProspectResponse(
         Long id,
@@ -24,10 +27,18 @@ public record ProspectResponse(
         Long responsavelId,
         String responsavelNome,
         Long clienteId,
+        LocalDate fechadoEm,
+        MotivoPerda motivoPerda,
+        String observacaoPerda,
         LocalDateTime criadoEm,
-        LugarEncontradoResponse lugar
+        LugarEncontradoResponse lugar,
+        PerfilTributarioDTO perfil
 ) {
     public static ProspectResponse from(Prospect p, LugarEncontradoResponse lugar) {
+        return from(p, lugar, null);
+    }
+
+    public static ProspectResponse from(Prospect p, LugarEncontradoResponse lugar, PerfilTributarioDTO perfil) {
         return new ProspectResponse(
                 p.getId(),
                 p.getOrigem(),
@@ -44,8 +55,12 @@ public record ProspectResponse(
                 p.getResponsavel().getId(),
                 p.getResponsavel().getNome(),
                 p.getCliente() != null ? p.getCliente().getId() : null,
+                p.getFechadoEm(),
+                p.getMotivoPerda(),
+                p.getObservacaoPerda(),
                 p.getCriadoEm(),
-                lugar != null ? lugar.comProspect(p) : null
+                lugar != null ? lugar.comProspect(p) : null,
+                perfil
         );
     }
 }

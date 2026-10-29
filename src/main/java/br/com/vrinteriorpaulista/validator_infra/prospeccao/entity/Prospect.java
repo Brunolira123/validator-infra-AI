@@ -7,10 +7,12 @@ import lombok.Getter;
 import lombok.Setter;
 import org.hibernate.annotations.SQLRestriction;
 
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 
 /**
- * Lugar que o comercial vai trabalhar em campo. Não é Cliente porque o Google não traz CNPJ: só vira Cliente no LTO.
+ * Lugar que o comercial vai trabalhar em campo. Não é Cliente porque o Google não traz CNPJ: só vira Cliente
+ * quando o contrato fecha.
  * <p>
  * Termos do Google: do Google, só o placeId pode ficar guardado. Nome, endereço, coordenadas e foto são buscados
  * de novo na hora de exibir (Place Details com cache de 24h). Cidade, UF e categoria são dados nossos (o que o
@@ -86,10 +88,21 @@ public class Prospect {
     @JoinColumn(name = "responsavel_id")
     private Usuario responsavel;
 
-    /** Preenchido no LTO. */
+    /** Preenchido no fechamento (contrato fechado). */
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "cliente_id")
     private Cliente cliente;
+
+    @Column(name = "fechado_em")
+    private LocalDate fechadoEm;
+
+    /** Só quando PERDIDO. */
+    @Enumerated(EnumType.STRING)
+    @Column(name = "motivo_perda", length = 20)
+    private MotivoPerda motivoPerda;
+
+    @Column(name = "observacao_perda", length = 500)
+    private String observacaoPerda;
 
     @Column(name = "criado_em", nullable = false, updatable = false)
     private LocalDateTime criadoEm;

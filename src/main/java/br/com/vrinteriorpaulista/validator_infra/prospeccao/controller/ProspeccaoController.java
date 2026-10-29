@@ -22,7 +22,7 @@ import java.time.Duration;
 import java.util.List;
 
 @RestController
-@Tag(name = "Prospecção", description = "Busca de comércios de alimentos no Google Places e funil de visita até o LTO")
+@Tag(name = "Prospecção", description = "Busca de comércios de alimentos no Google Places e funil de visita, fechamento e LTO")
 @RequestMapping("/api/prospeccao")
 @PreAuthorize("hasAnyRole('ADMIN', 'COMERCIAL', 'TECNICO')")
 public class ProspeccaoController {
@@ -90,23 +90,41 @@ public class ProspeccaoController {
 
     @Operation(summary = "Registra uma visita",
             description = "ATENDEU exige temperatura; NAO_ATENDEU não aceita temperatura. O prospect vai para VISITADO "
-                    + "e a última visita define resultado e temperatura. 409 se já virou LTO.")
+                    + "e a última visita define resultado e temperatura. PERDIDO reabre como VISITADO. 409 se o contrato já foi "
+                    + "fechado (FECHADO ou LTO).")
     @PostMapping("/prospects/{id}/visita")
     public ProspectResponse registrarVisita(@PathVariable Long id, @RequestBody @Valid VisitaProspectRequest req) {
         return prospects.registrarVisita(id, req);
     }
 
-    @Operation(summary = "Descarta o prospect", description = "409 se já virou LTO.")
+    @Operation(summary = "Descarta o prospect", description = "409 se o contrato já foi fechado (FECHADO ou LTO).")
     @PostMapping("/prospects/{id}/descartar")
     public ProspectResponse descartar(@PathVariable Long id) {
         return prospects.descartar(id);
     }
 
-    @Operation(summary = "LTO: transforma o prospect em Cliente + Levantamento",
+    @Operation(summary = "Fecha o contrato: o prospect vira Cliente",
             description = "Só para prospect VISITADO em que o cliente atendeu (senão 409). Reaproveita o Cliente se o "
-                    + "CNPJ já existir; se não, cria com os dados da Receita. Depois siga para "
-                    + "/comercial/levantamentos/{levantamentoId}.")
+                    + "CNPJ já existir (inclusive arquivado); se não, cria com os dados da Receita. fechadoEm = "
+                    + "dataFechamento ou hoje. A resposta traz o selo de perfil do CNPJ (só aviso).")
     // Mesmos perfis que criam Cliente e Levantamento nas telas atuais (TECNICO não cria)
+    @PreAuthorize("hasAnyRole('COMERCIAL', 'ADMIN')")
+    @PostMapping("/prospects/{id}/fechar")
+    public ProspectResponse fechar(@PathVariable Long id, @RequestBody @Valid FecharProspectRequest req) {
+        return prospects.fechar(id, req);
+    }
+
+    @Operation(summary = "Marca a negociação como perdida",
+            description = "Só para prospect VISITADO (senão 409). O lugar fica livre para outro comercial, como o "
+                    + "descartado, e pode receber nova visita.")
+    @PostMapping("/prospects/{id}/perder")
+    public ProspectResponse perder(@PathVariable Long id, @RequestBody @Valid PerderProspectRequest req) {
+        return prospects.perder(id, req);
+    }
+
+    @Operation(summary = "LTO: cria o Levantamento do cliente fechado",
+            description = "Só para prospect FECHADO (senão 409). Depois siga para "
+                    + "/comercial/levantamentos/{levantamentoId}.")
     @PreAuthorize("hasAnyRole('COMERCIAL', 'ADMIN')")
     @PostMapping("/prospects/{id}/lto")
     public LtoProspectResponse lto(@PathVariable Long id, @RequestBody @Valid LtoProspectRequest req) {

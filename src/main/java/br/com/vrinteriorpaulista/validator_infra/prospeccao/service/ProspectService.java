@@ -6,7 +6,9 @@ import br.com.vrinteriorpaulista.validator_infra.dto.response.CnpjResponseDTO;
 import br.com.vrinteriorpaulista.validator_infra.entity.Cliente;
 import br.com.vrinteriorpaulista.validator_infra.entity.Levantamento;
 import br.com.vrinteriorpaulista.validator_infra.entity.Usuario;
+import br.com.vrinteriorpaulista.validator_infra.dto.response.PerfilTributarioDTO;
 import br.com.vrinteriorpaulista.validator_infra.enums.Perfil;
+import br.com.vrinteriorpaulista.validator_infra.exception.ServicoIndisponivelException;
 import br.com.vrinteriorpaulista.validator_infra.prospeccao.dto.*;
 import br.com.vrinteriorpaulista.validator_infra.prospeccao.entity.*;
 import br.com.vrinteriorpaulista.validator_infra.prospeccao.repository.ProspectRepository;
@@ -29,16 +31,19 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionTemplate;
 
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
 /**
- * Funil do prospect de campo: salvar da busca, registrar visita, descartar e LTO (vira Cliente + Levantamento).
+ * Funil do prospect de campo: salvar da busca, registrar visita, fechar (vira Cliente) ou perder, LTO (Levantamento
+ * do cliente fechado) e descartar.
  * COMERCIAL (e demais perfis) só enxerga os prospects que salvou; ADMIN e DIRETORIA veem todos.
  */
 @Service
@@ -46,6 +51,9 @@ import java.util.stream.Collectors;
 public class ProspectService {
 
     static final int TAMANHO_MAXIMO_PAGINA = 50;
+
+    /** Contrato fechado: não volta atrás (nem visita nem descarte). */
+    private static final Set<StatusProspect> FECHADOS = Set.of(StatusProspect.FECHADO, StatusProspect.LTO);
 
     private final ProspectRepository repo;
     private final VisitaProspectRepository visitaRepo;
@@ -80,7 +88,7 @@ public class ProspectService {
     /**
      * Busca no Google e marca os lugares que já são prospect, com uma query só. Prospect de outro comercial
      * (para quem não é ADMIN/DIRETORIA) vem só como deOutroComercial, sem id, status nem temperatura;
-     * se ele descartou, o lugar vem livre (qualquer um pode salvar e assumir).
+     * se ele descartou ou perdeu, o lugar vem livre (qualquer um pode salvar e assumir).
      */
     public PaginaBuscaProspectResponse buscar(String cidade, String uf, List<CategoriaProspeccao> categorias, String pagina) {
         PaginaBuscaProspectResponse resultado = prospeccao.buscar(cidade, uf, categorias, pagina);
@@ -100,7 +108,7 @@ public class ProspectService {
                     if (podeVer(prospect)) {
                         return lugar.comProspect(prospect);
                     }
-                    return prospect.getStatus() == StatusProspect.DESCARTADO ? lugar : lugar.comoDeOutroComercial();
+                    return livre(prospect) ? lugar : lugar.comoDeOutroComercial();
                 })
                 .toList();
         return new PaginaBuscaProspectResponse(lugares, resultado.proximaPagina());
@@ -109,7 +117,7 @@ public class ProspectService {
     /**
      * Idempotente por placeId: se já existe e o usuário enxerga, devolve o existente.
      * Se é de outro comercial, 409 (não dá para dois trabalharem o mesmo lugar sem saber).
-     * Descartado volta ao funil como NOVO (201) com quem salvou de responsável, seja o mesmo usuário ou outro;
+     * Descartado ou perdido volta ao funil como NOVO (201) com quem salvou de responsável, seja o mesmo usuário ou outro;
      * as visitas antigas ficam no histórico.
      * Dois salvando o mesmo lugar ao mesmo tempo: o segundo bate no unique e tenta de novo numa transação nova,
      * que já enxerga o prospect gravado pelo primeiro (mesmo usuário: 200 com o existente; outro comercial: 409).
@@ -128,13 +136,14 @@ public class ProspectService {
 
     private Salvo salvarNaTransacao(SalvarProspectRequest req) {
         Prospect existente = repo.findByPlaceIdIncluindoExcluidos(req.placeId()).orElse(null);
-        if (existente != null && existente.getExcluidoEm() == null && existente.getStatus() == StatusProspect.DESCARTADO) {
+        if (existente != null && existente.getExcluidoEm() == null && livre(existente)) {
             Usuario atual = usuarioLogado.usuario();
             if (!existente.getResponsavel().getId().equals(atual.getId())) {
-                log.info("Prospect descartado {} (placeId {}) transferido de {} para {}", existente.getId(),
+                log.info("Prospect {} {} (placeId {}) transferido de {} para {}", existente.getStatus(), existente.getId(),
                         existente.getPlaceId(), existente.getResponsavel().getId(), atual.getId());
             } else {
-                log.info("Prospect descartado {} (placeId {}) reaberto", existente.getId(), existente.getPlaceId());
+                log.info("Prospect {} {} (placeId {}) reaberto", existente.getStatus(), existente.getId(),
+                        existente.getPlaceId());
             }
             limparFunil(existente);
             existente.setStatus(StatusProspect.NOVO);
@@ -166,12 +175,24 @@ public class ProspectService {
         return new Salvo(ProspectResponse.from(repo.saveAndFlush(p), null), true);
     }
 
-    /** Zera o resultado da última visita; as visitas (prospect_visita) não são apagadas. */
+    /** Zera o resultado da última visita e da perda; as visitas (prospect_visita) não são apagadas. */
     private static void limparFunil(Prospect p) {
         p.setResultadoVisita(null);
         p.setTemperatura(null);
         p.setVisitadoEm(null);
         p.setObservacao(null);
+        p.setFechadoEm(null);
+        limparPerda(p);
+    }
+
+    private static void limparPerda(Prospect p) {
+        p.setMotivoPerda(null);
+        p.setObservacaoPerda(null);
+    }
+
+    /** Descartado ou perdido: outro comercial pode salvar e assumir. */
+    private static boolean livre(Prospect p) {
+        return p.getStatus() == StatusProspect.DESCARTADO || p.getStatus() == StatusProspect.PERDIDO;
     }
 
     /** Lista paginada. O Google (Place Details) só é consultado para a página devolvida. */
@@ -216,7 +237,7 @@ public class ProspectService {
         return ProspectResponse.from(p, prospeccao.lugaresDosProspects(List.of(p)).get(p.getId()));
     }
 
-    /** Pode haver várias visitas: cada uma grava histórico e a última define o prospect. */
+    /** Pode haver várias visitas: cada uma grava histórico e a última define o prospect. PERDIDO reabre como VISITADO. */
     @Transactional
     public ProspectResponse registrarVisita(Long id, VisitaProspectRequest req) {
         if (req.resultado() == ResultadoVisita.ATENDEU && req.temperatura() == null) {
@@ -226,8 +247,8 @@ public class ProspectService {
             throw new IllegalArgumentException("Temperatura só vale quando o cliente atendeu");
         }
         Prospect p = buscarVisivel(id);
-        if (p.getStatus() == StatusProspect.LTO) {
-            throw new IllegalStateException("Prospect já virou LTO");
+        if (FECHADOS.contains(p.getStatus())) {
+            throw new IllegalStateException("Prospect com contrato fechado não recebe visita");
         }
 
         LocalDateTime agora = LocalDateTime.now();
@@ -247,35 +268,40 @@ public class ProspectService {
         p.setTemperatura(req.temperatura());
         p.setVisitadoEm(agora);
         p.setObservacao(req.observacao());
+        limparPerda(p);
         return ProspectResponse.from(repo.save(p), null);
     }
 
     @Transactional
     public ProspectResponse descartar(Long id) {
         Prospect p = buscarVisivel(id);
-        if (p.getStatus() == StatusProspect.LTO) {
-            throw new IllegalStateException("Prospect que já virou LTO não pode ser descartado");
+        if (FECHADOS.contains(p.getStatus())) {
+            throw new IllegalStateException("Prospect com contrato fechado não pode ser descartado");
         }
         p.setStatus(StatusProspect.DESCARTADO);
         return ProspectResponse.from(repo.save(p), null);
     }
 
     /**
-     * Prospect visitado e que atendeu vira Cliente (só com dados da Receita) + Levantamento, numa transação.
-     * Reaproveita o Cliente se o CNPJ já estiver cadastrado. As regras de Cliente e Levantamento ficam nos
-     * services deles. O selo de perfil não bloqueia o LTO.
+     * Contrato fechado: prospect visitado e que atendeu vira Cliente (só com dados da Receita), reaproveitando o
+     * Cliente se o CNPJ já estiver cadastrado (o ClienteService.criar reativa o arquivado). As regras de Cliente ficam
+     * no service dele. A resposta traz o selo de perfil do CNPJ, que não bloqueia nada: com o cliente já cadastrado,
+     * a Receita fora do ar só deixa o perfil null.
      */
     @Transactional
-    public LtoProspectResponse lto(Long id, LtoProspectRequest req) {
+    public ProspectResponse fechar(Long id, FecharProspectRequest req) {
         Prospect p = buscarVisivel(id);
         if (p.getStatus() != StatusProspect.VISITADO || p.getResultadoVisita() != ResultadoVisita.ATENDEU) {
-            throw new IllegalStateException("LTO só depois de uma visita em que o cliente atendeu");
+            throw new IllegalStateException("Fechamento só depois de uma visita em que o cliente atendeu");
         }
 
         String cnpj = CnpjUtils.normalizar(req.cnpj());
-        Cliente cliente = clienteRepo.findByCnpj(cnpj).orElseGet(() -> {
+        Cliente cliente = clienteRepo.findByCnpj(cnpj).orElse(null);
+        PerfilTributarioDTO perfil;
+        if (cliente == null) {
             CnpjResponseDTO receita = clienteService.consultarCnpj(cnpj);
-            return clienteService.criar(new ClienteRequest(
+            perfil = receita.perfil();
+            cliente = clienteService.criar(new ClienteRequest(
                     receita.cnpj(),
                     receita.razaoSocial(),
                     receita.nomeFantasia(),
@@ -284,8 +310,52 @@ public class ProspectService {
                     receita.uf(),
                     receita.telefone(),
                     receita.email()));
-        });
+        } else {
+            perfil = perfilSemFalhar(cnpj);
+        }
 
+        p.setCliente(cliente);
+        p.setStatus(StatusProspect.FECHADO);
+        p.setFechadoEm(req.dataFechamento() != null ? req.dataFechamento() : LocalDate.now());
+        if (req.observacao() != null && !req.observacao().isBlank()) {
+            p.setObservacao(req.observacao());
+        }
+        repo.save(p);
+        log.info("Prospect {} fechado: cliente {}", id, cliente.getId());
+        return ProspectResponse.from(p, null, perfil);
+    }
+
+    private PerfilTributarioDTO perfilSemFalhar(String cnpj) {
+        try {
+            return clienteService.consultarCnpj(cnpj).perfil();
+        } catch (ServicoIndisponivelException e) {
+            log.warn("Selo de perfil do CNPJ {} indisponível: {}", cnpj, e.getMessage());
+            return null;
+        }
+    }
+
+    /** Negociação perdida depois da visita. Fica livre para outro comercial, como o descartado. */
+    @Transactional
+    public ProspectResponse perder(Long id, PerderProspectRequest req) {
+        Prospect p = buscarVisivel(id);
+        if (p.getStatus() != StatusProspect.VISITADO) {
+            throw new IllegalStateException("Só prospect visitado pode ser marcado como perdido");
+        }
+        p.setStatus(StatusProspect.PERDIDO);
+        p.setMotivoPerda(req.motivo());
+        p.setObservacaoPerda(req.observacao());
+        return ProspectResponse.from(repo.save(p), null);
+    }
+
+    /** Levantamento do cliente fechado. As regras de Levantamento ficam no service dele. */
+    @Transactional
+    public LtoProspectResponse lto(Long id, LtoProspectRequest req) {
+        Prospect p = buscarVisivel(id);
+        if (p.getStatus() != StatusProspect.FECHADO) {
+            throw new IllegalStateException("LTO só depois do contrato fechado");
+        }
+
+        Cliente cliente = p.getCliente();
         Levantamento levantamento = levantamentoService.criar(new LevantamentoRequest(
                 cliente.getId(),
                 req.qtdServidores(),
@@ -295,7 +365,6 @@ public class ProspectService {
                 req.qtdConsultaPreco(),
                 req.outros()));
 
-        p.setCliente(cliente);
         p.setStatus(StatusProspect.LTO);
         repo.save(p);
         log.info("Prospect {} virou LTO: cliente {}, levantamento {}", id, cliente.getId(), levantamento.getId());
