@@ -11,7 +11,10 @@ import br.com.vrinteriorpaulista.validator_infra.repository.UsuarioRepository;
 import com.jayway.jsonpath.JsonPath;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.system.CapturedOutput;
+import org.springframework.boot.test.system.OutputCaptureExtension;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -27,6 +30,7 @@ import java.util.stream.IntStream;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.hamcrest.Matchers.contains;
+import static org.hamcrest.Matchers.containsInAnyOrder;
 import static org.hamcrest.Matchers.hasSize;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -38,6 +42,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  * Cada teste cria clientes com um prefixo único e filtra a lista por ele (busca), para não ver os de outros testes.
  */
 @IntegrationTest
+@ExtendWith(OutputCaptureExtension.class)
 class AmbienteSuporteIntegrationTest {
 
     @Autowired
@@ -140,6 +145,44 @@ class AmbienteSuporteIntegrationTest {
                 """.formatted("x".repeat(101))).andExpect(status().isBadRequest());
 
         assertThat(ambienteRepo.findById(c.id())).isEmpty();
+    }
+
+    @Test
+    void ambienteRecusadoLogaClienteEMotivoSemMudarAResposta(CapturedOutput output) throws Exception {
+        Cliente c = cadastrar(prefixo + " Recusado");
+
+        enviarAmbiente(c, """
+                {"coletadoEm":"2026-11-06T08:00:00-03:00","containers":[{"nome":"","rodando":true}]}
+                """)
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.mensagem").value("Dados inválidos"))
+                .andExpect(jsonPath("$.path").value("/api/monitor/agente/ambiente"))
+                .andExpect(jsonPath("$.campos[*].campo")
+                        .value(containsInAnyOrder("dockerDisponivel", "containers[0].nome")));
+
+        assertThat(output.getAll())
+                .containsPattern("WARN.*Ambiente recusado do agente cliente " + c.id() + " \\(" + prefixo + " Recusado\\)")
+                .contains("dockerDisponivel (")
+                .contains("containers[0].nome (");
+
+        enviarAmbiente(c, "{\"coletadoEm\":\"ontem\"")
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.mensagem").value("Corpo da requisição inválido ou mal formatado"));
+        assertThat(output.getAll()).containsPattern(
+                "WARN.*Ambiente recusado do agente cliente " + c.id() + " .*: corpo inválido: ");
+    }
+
+    @Test
+    void recusaDeOutroEndpointDoAgenteNaoLogaComoAmbiente(CapturedOutput output) throws Exception {
+        Cliente c = cadastrar(prefixo + " Resultado");
+        mockMvc.perform(post("/api/monitor/agente/resultados")
+                        .header(HttpHeaders.AUTHORIZATION, c.agente())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"lojas\":[]}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.mensagem").value("Dados inválidos"));
+
+        assertThat(output.getAll()).doesNotContain("Ambiente recusado do agente cliente " + c.id() + " ");
     }
 
     // ---- Lista do Suporte ----
