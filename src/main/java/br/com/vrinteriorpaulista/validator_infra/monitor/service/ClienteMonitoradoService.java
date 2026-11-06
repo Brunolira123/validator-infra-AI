@@ -120,6 +120,11 @@ public class ClienteMonitoradoService {
         return c.getUltimoContato() != null && c.getUltimoContato().isBefore(Instant.now().minus(offlineApos));
     }
 
+    /** Ativo e com contato dentro do limite. Agente que nunca falou com o servidor não está online. */
+    public boolean online(ClienteMonitorado c) {
+        return c.getAtivo() && c.getUltimoContato() != null && !semContato(c);
+    }
+
     private SituacaoCliente situacao(ClienteMonitorado c, Execucao ultima) {
         if (!c.getAtivo()) return SituacaoCliente.INATIVO;
         if (semContato(c)) return SituacaoCliente.OFFLINE;

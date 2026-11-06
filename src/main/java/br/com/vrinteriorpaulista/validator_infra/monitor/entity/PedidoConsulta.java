@@ -8,8 +8,10 @@ import lombok.Setter;
 import java.time.Instant;
 
 /**
- * "Consultar agora" pedido no portal. O servidor não alcança a rede do cliente, então o pedido fica na fila
- * até o agente buscar (polling) e devolver o resultado.
+ * Pedido do portal ao agente ("Consultar agora" ou log de container). O servidor não alcança a rede do cliente,
+ * então o pedido fica na fila até o agente buscar (polling) e devolver o resultado.
+ * <p>
+ * Também é a auditoria dos pedidos de log: quem pediu, cliente, container e quando ficam; só o texto é apagado.
  */
 @Entity
 @Table(name = "pedido", schema = "monitor")
@@ -24,6 +26,11 @@ public class PedidoConsulta {
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "cliente_id")
     private ClienteMonitorado cliente;
+
+    /** Default no banco para as linhas criadas antes dos pedidos de log. */
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false, columnDefinition = "varchar(20) default 'CONSULTA'")
+    private TipoPedido tipo = TipoPedido.CONSULTA;
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 20)
@@ -45,6 +52,26 @@ public class PedidoConsulta {
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "execucao_id")
     private Execucao execucao;
+
+    // ---- Só nos pedidos LOG ----
+
+    @Column(length = 100)
+    private String container;
+
+    private Integer linhas;
+
+    /** Apagado por LogContainerService.limparTextos depois da retenção; nunca vai para o log do servidor. */
+    @Column(columnDefinition = "text")
+    private String texto;
+
+    /** O agente cortou o texto para caber no limite. */
+    private Boolean truncado;
+
+    @Column(length = 500)
+    private String erro;
+
+    @Column(name = "texto_apagado_em")
+    private Instant textoApagadoEm;
 
     @PrePersist
     public void prePersist() {

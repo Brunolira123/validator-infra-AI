@@ -1,6 +1,7 @@
 package br.com.vrinteriorpaulista.validator_infra.monitor.service;
 
 import br.com.vrinteriorpaulista.validator_infra.monitor.dto.AmbienteAgenteRequest;
+import br.com.vrinteriorpaulista.validator_infra.monitor.dto.PedidoAgenteResponse;
 import br.com.vrinteriorpaulista.validator_infra.monitor.dto.ResultadoAgenteRequest;
 import br.com.vrinteriorpaulista.validator_infra.monitor.entity.AmbienteCliente;
 import br.com.vrinteriorpaulista.validator_infra.monitor.entity.ClienteMonitorado;
@@ -46,9 +47,11 @@ public class AgenteService {
     }
 
     @Transactional
-    public Optional<PedidoConsulta> buscarPedido(AgenteAutenticado agente, String versaoAgente) {
-        registrarContato(agente, versaoAgente);
-        return pedidoService.entregarProximo(agente.clienteId());
+    public Optional<PedidoAgenteResponse> buscarPedido(AgenteAutenticado agente, String versaoAgente) {
+        ClienteMonitorado cliente = registrarContato(agente, versaoAgente);
+        boolean aceitaLog = pedidoService.aceitaLog(cliente.getVersaoAgente());
+        return pedidoService.entregarProximo(cliente.getId(), cliente.getVersaoAgente())
+                .map(p -> PedidoAgenteResponse.from(p, aceitaLog));
     }
 
     @Transactional

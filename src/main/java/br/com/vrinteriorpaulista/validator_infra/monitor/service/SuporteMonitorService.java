@@ -61,8 +61,7 @@ public class SuporteMonitorService {
 
     /** Mesma regra do monitoramento; agente que nunca fez contato também conta como offline. */
     private SituacaoAgente situacao(ClienteMonitorado c) {
-        return c.getUltimoContato() == null || clienteService.semContato(c)
-                ? SituacaoAgente.OFFLINE : SituacaoAgente.ONLINE;
+        return clienteService.online(c) ? SituacaoAgente.ONLINE : SituacaoAgente.OFFLINE;
     }
 
     private static String normalizar(String texto) {

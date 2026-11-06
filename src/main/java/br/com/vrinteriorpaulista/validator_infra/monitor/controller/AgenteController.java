@@ -3,10 +3,12 @@ package br.com.vrinteriorpaulista.validator_infra.monitor.controller;
 import br.com.vrinteriorpaulista.validator_infra.dto.response.ErroResponse;
 import br.com.vrinteriorpaulista.validator_infra.controller.exception.GlobalExceptionHandler;
 import br.com.vrinteriorpaulista.validator_infra.monitor.dto.AmbienteAgenteRequest;
+import br.com.vrinteriorpaulista.validator_infra.monitor.dto.LogAgenteRequest;
 import br.com.vrinteriorpaulista.validator_infra.monitor.dto.PedidoAgenteResponse;
 import br.com.vrinteriorpaulista.validator_infra.monitor.dto.ResultadoAgenteRequest;
 import br.com.vrinteriorpaulista.validator_infra.monitor.security.AgenteAutenticado;
 import br.com.vrinteriorpaulista.validator_infra.monitor.service.AgenteService;
+import br.com.vrinteriorpaulista.validator_infra.monitor.service.LogContainerService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.servlet.http.HttpServletRequest;
@@ -39,20 +41,31 @@ public class AgenteController {
     private static final int MAX_MOTIVO_NO_LOG = 300;
 
     private final AgenteService agenteService;
+    private final LogContainerService logService;
     private final GlobalExceptionHandler errosGlobais;
 
-    public AgenteController(AgenteService agenteService, GlobalExceptionHandler errosGlobais) {
+    public AgenteController(AgenteService agenteService, LogContainerService logService,
+                            GlobalExceptionHandler errosGlobais) {
         this.agenteService = agenteService;
+        this.logService = logService;
         this.errosGlobais = errosGlobais;
     }
 
-    @Operation(summary = "Polling do agente (a cada ~30s)", description = "200 com pedidoId se houver \"Consultar agora\" pendente; 204 se não. Também registra o contato (heartbeat).")
+    @Operation(summary = "Polling do agente (a cada ~30s)", description = "200 com o pedido pendente; 204 se não houver. Agente 2.3.0+ recebe também tipo (CONSULTA ou LOG), container e linhas; os anteriores só recebem pedidoId e nunca pedidos LOG. Também registra o contato (heartbeat).")
     @GetMapping("/pedidos")
     public ResponseEntity<PedidoAgenteResponse> pedidos(@AuthenticationPrincipal AgenteAutenticado agente,
                                                         @RequestHeader(value = HEADER_VERSAO, required = false) String versao) {
         return agenteService.buscarPedido(agente, versao)
-                .map(p -> ResponseEntity.ok(new PedidoAgenteResponse(p.getId())))
+                .map(ResponseEntity::ok)
                 .orElseGet(() -> ResponseEntity.noContent().build());
+    }
+
+    @Operation(summary = "Envia o log de um container (pedido LOG)", description = "texto até 256 KB (UTF-8), ou erro se não conseguiu ler. 400 se o pedido não for um LOG deste cliente; 409 se já foi respondido.")
+    @PostMapping("/pedidos/{id}/log")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void log(@AuthenticationPrincipal AgenteAutenticado agente, @PathVariable Long id,
+                    @RequestBody @Valid LogAgenteRequest req) {
+        logService.receber(agente, id, req);
     }
 
     @Operation(summary = "Envia o resultado de uma execução", description = "Com pedidoId, conclui o \"Consultar agora\" (400 se o pedido não for deste cliente). Execuções AGENDADO geram alerta no Discord.")
