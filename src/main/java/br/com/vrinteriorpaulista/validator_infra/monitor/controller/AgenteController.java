@@ -1,5 +1,6 @@
 package br.com.vrinteriorpaulista.validator_infra.monitor.controller;
 
+import br.com.vrinteriorpaulista.validator_infra.monitor.dto.AmbienteAgenteRequest;
 import br.com.vrinteriorpaulista.validator_infra.monitor.dto.PedidoAgenteResponse;
 import br.com.vrinteriorpaulista.validator_infra.monitor.dto.ResultadoAgenteRequest;
 import br.com.vrinteriorpaulista.validator_infra.monitor.security.AgenteAutenticado;
@@ -44,5 +45,13 @@ public class AgenteController {
     public void resultados(@AuthenticationPrincipal AgenteAutenticado agente,
                            @RequestBody @Valid ResultadoAgenteRequest req) {
         agenteService.receberResultado(agente, req);
+    }
+
+    @Operation(summary = "Envia a foto do ambiente (containers Docker)", description = "Substitui a foto anterior do cliente. Até 100 containers. Também registra o contato.")
+    @PostMapping("/ambiente")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void ambiente(@AuthenticationPrincipal AgenteAutenticado agente,
+                         @RequestBody @Valid AmbienteAgenteRequest req) {
+        agenteService.receberAmbiente(agente, req);
     }
 }

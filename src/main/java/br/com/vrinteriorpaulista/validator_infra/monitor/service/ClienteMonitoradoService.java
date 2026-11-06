@@ -115,11 +115,14 @@ public class ClienteMonitoradoService {
         );
     }
 
+    /** Já falou com o servidor e está sem contato além de app.monitor.offline-apos. */
+    public boolean semContato(ClienteMonitorado c) {
+        return c.getUltimoContato() != null && c.getUltimoContato().isBefore(Instant.now().minus(offlineApos));
+    }
+
     private SituacaoCliente situacao(ClienteMonitorado c, Execucao ultima) {
         if (!c.getAtivo()) return SituacaoCliente.INATIVO;
-        if (c.getUltimoContato() != null && c.getUltimoContato().isBefore(Instant.now().minus(offlineApos))) {
-            return SituacaoCliente.OFFLINE;
-        }
+        if (semContato(c)) return SituacaoCliente.OFFLINE;
         if (ultima == null) return SituacaoCliente.AGUARDANDO;
         return ultima.getOk() ? SituacaoCliente.OK : SituacaoCliente.FALHA;
     }

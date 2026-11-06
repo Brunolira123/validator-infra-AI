@@ -13,6 +13,8 @@ public interface ClienteMonitoradoRepository extends JpaRepository<ClienteMonito
 
     List<ClienteMonitorado> findAllByOrderByNomeAsc();
 
+    List<ClienteMonitorado> findByAtivoTrueOrderByNomeAsc();
+
     /** Agentes que já reportaram alguma vez e estão sem contato desde `limite`. */
     List<ClienteMonitorado> findByAtivoTrueAndUltimoContatoBefore(Instant limite);
 }
