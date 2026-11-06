@@ -2,17 +2,15 @@ package br.com.vrinteriorpaulista.validator_infra.monitor.service;
 
 import br.com.vrinteriorpaulista.validator_infra.entity.Usuario;
 import br.com.vrinteriorpaulista.validator_infra.monitor.dto.LogAgenteRequest;
-import br.com.vrinteriorpaulista.validator_infra.monitor.dto.PedidoLogCriadoResponse;
+import br.com.vrinteriorpaulista.validator_infra.monitor.dto.PedidoCriadoResponse;
 import br.com.vrinteriorpaulista.validator_infra.monitor.dto.PedidoLogResponse;
 import br.com.vrinteriorpaulista.validator_infra.monitor.entity.ClienteMonitorado;
 import br.com.vrinteriorpaulista.validator_infra.monitor.entity.PedidoConsulta;
 import br.com.vrinteriorpaulista.validator_infra.monitor.entity.StatusPedido;
 import br.com.vrinteriorpaulista.validator_infra.monitor.entity.TipoPedido;
-import br.com.vrinteriorpaulista.validator_infra.monitor.repository.AmbienteClienteRepository;
 import br.com.vrinteriorpaulista.validator_infra.monitor.repository.PedidoConsultaRepository;
 import br.com.vrinteriorpaulista.validator_infra.monitor.security.AgenteAutenticado;
 import br.com.vrinteriorpaulista.validator_infra.service.UsuarioLogadoService;
-import jakarta.persistence.EntityNotFoundException;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.scheduling.annotation.Scheduled;
@@ -37,20 +35,20 @@ public class LogContainerService {
     public static final int MAX_LINHAS = 500;
 
     private final PedidoConsultaRepository pedidoRepo;
-    private final AmbienteClienteRepository ambienteRepo;
+    private final PedidosDeContainer pedidos;
     private final ClienteMonitoradoService clienteService;
     private final PedidoConsultaService pedidoService;
     private final UsuarioLogadoService usuarioLogado;
     private final Duration retencao;
 
     public LogContainerService(PedidoConsultaRepository pedidoRepo,
-                               AmbienteClienteRepository ambienteRepo,
+                               PedidosDeContainer pedidos,
                                ClienteMonitoradoService clienteService,
                                PedidoConsultaService pedidoService,
                                UsuarioLogadoService usuarioLogado,
                                @Value("${app.monitor.log-retencao:PT1H}") Duration retencao) {
         this.pedidoRepo = pedidoRepo;
-        this.ambienteRepo = ambienteRepo;
+        this.pedidos = pedidos;
         this.clienteService = clienteService;
         this.pedidoService = pedidoService;
         this.usuarioLogado = usuarioLogado;
@@ -62,27 +60,18 @@ public class LogContainerService {
      * para atender log. Clique repetido no mesmo container devolve o pedido aberto.
      */
     @Transactional
-    public PedidoLogCriadoResponse solicitar(Long clienteId, String container, int linhas) {
+    public PedidoCriadoResponse solicitar(Long clienteId, String container, int linhas) {
         if (linhas < 1 || linhas > MAX_LINHAS) {
             throw new IllegalArgumentException("linhas deve estar entre 1 e " + MAX_LINHAS);
         }
         ClienteMonitorado cliente = clienteService.buscar(clienteId);
-        boolean existe = ambienteRepo.findById(clienteId)
-                .map(a -> a.getContainers().stream().anyMatch(c -> c.nome().equals(container)))
-                .orElse(false);
-        if (!existe) {
-            throw new EntityNotFoundException("Container não encontrado no último ambiente enviado pelo agente");
-        }
-        if (!clienteService.online(cliente)) {
-            throw new IllegalStateException("Agente do cliente está offline");
-        }
+        pedidos.exigirContainerComAgenteOnline(cliente, container);
         if (!pedidoService.aceitaLog(cliente.getVersaoAgente())) {
             throw new IllegalStateException("Agente " + cliente.getVersaoAgente()
                     + " não envia log de container: atualize o agente");
         }
 
-        PedidoConsulta pedido = pedidoRepo.findAberto(clienteId, TipoPedido.LOG, container,
-                        PedidoConsultaService.ABERTOS, pedidoService.limiteValidade())
+        PedidoConsulta pedido = pedidos.aberto(clienteId, TipoPedido.LOG, container)
                 .orElseGet(() -> {
                     Usuario usuario = usuarioLogado.usuario();
                     PedidoConsulta novo = new PedidoConsulta();
@@ -96,29 +85,18 @@ public class LogContainerService {
                             container, cliente.getId(), cliente.getNome(), usuario.getLogin(), novo.getId(), linhas);
                     return novo;
                 });
-        return new PedidoLogCriadoResponse(pedido.getId());
+        return new PedidoCriadoResponse(pedido.getId());
     }
 
     @Transactional
     public PedidoLogResponse buscar(Long clienteId, String container, Long pedidoId) {
-        PedidoConsulta pedido = pedidoRepo.findById(pedidoId)
-                .filter(p -> p.getTipo() == TipoPedido.LOG
-                        && p.getCliente().getId().equals(clienteId)
-                        && p.getContainer().equals(container))
-                .orElseThrow(() -> new EntityNotFoundException("Pedido de log não encontrado"));
-        pedidoService.expirarSeVencido(pedido);
-        return PedidoLogResponse.from(pedido);
+        return PedidoLogResponse.from(pedidos.doCliente(clienteId, container, pedidoId,
+                t -> t == TipoPedido.LOG, "Pedido de log não encontrado"));
     }
 
-    /** Aceita mesmo se já expirou (como a consulta): o log chegou, então vale. Só uma resposta por pedido. */
     @Transactional
     public void receber(AgenteAutenticado agente, Long pedidoId, LogAgenteRequest req) {
-        PedidoConsulta pedido = pedidoRepo.findById(pedidoId)
-                .filter(p -> p.getTipo() == TipoPedido.LOG && p.getCliente().getId().equals(agente.clienteId()))
-                .orElseThrow(() -> new IllegalArgumentException("Pedido " + pedidoId + " não é um pedido de log deste agente"));
-        if (pedido.getStatus() == StatusPedido.CONCLUIDO || pedido.getStatus() == StatusPedido.ERRO) {
-            throw new IllegalStateException("Pedido " + pedidoId + " já foi respondido");
-        }
+        PedidoConsulta pedido = pedidos.paraResponder(agente, pedidoId, t -> t == TipoPedido.LOG, "log");
 
         String erro = req.erro() == null || req.erro().isBlank() ? null : req.erro().trim();
         if (erro == null) {

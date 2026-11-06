@@ -39,6 +39,28 @@ public class ClienteMonitorado {
     @Column(name = "versao_agente", length = 30)
     private String versaoAgente;
 
+    /** Versão para a qual o vrip-updater deve atualizar o agente. Null = sem atualização pendente. */
+    @Column(name = "versao_alvo_agente", length = 30)
+    private String versaoAlvoAgente;
+
+    /**
+     * Última versão alvo cuja atualização falhou (FALHOU/ROLLBACK). O updater não tenta de novo a mesma versão
+     * sozinho: só uma versão alvo diferente.
+     */
+    @Column(name = "versao_alvo_falhou", length = 30)
+    private String versaoAlvoFalhou;
+
+    /** Recebe as versões novas primeiro (escopo PILOTO). Default no banco para as linhas já existentes. */
+    @Column(nullable = false, columnDefinition = "boolean default false")
+    private Boolean piloto = false;
+
+    @Column(name = "updater_versao", length = 30)
+    private String updaterVersao;
+
+    /** Última consulta do vrip-updater (processo separado do agente: não conta como contato do agente). */
+    @Column(name = "updater_ultimo_contato")
+    private Instant updaterUltimoContato;
+
     /** Já avisou no Discord que o agente está offline: no próximo contato sai o aviso de que voltou. */
     @Column(name = "alerta_offline_enviado", nullable = false)
     private Boolean alertaOfflineEnviado = false;

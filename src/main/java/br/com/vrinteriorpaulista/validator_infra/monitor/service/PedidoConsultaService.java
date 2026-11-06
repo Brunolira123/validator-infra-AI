@@ -15,6 +15,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Duration;
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 import java.util.regex.Matcher;
@@ -36,17 +37,20 @@ public class PedidoConsultaService {
     private final UsuarioLogadoService usuarioLogado;
     private final Duration validade;
     private final String versaoMinimaLog;
+    private final String versaoMinimaAcao;
 
     public PedidoConsultaService(PedidoConsultaRepository repo,
                                  ClienteMonitoradoService clienteService,
                                  UsuarioLogadoService usuarioLogado,
                                  @Value("${app.monitor.pedido-validade:PT5M}") Duration validade,
-                                 @Value("${app.monitor.versao-minima-log:2.3.0}") String versaoMinimaLog) {
+                                 @Value("${app.monitor.versao-minima-log:2.3.0}") String versaoMinimaLog,
+                                 @Value("${app.monitor.versao-minima-acao:2.4.0}") String versaoMinimaAcao) {
         this.repo = repo;
         this.clienteService = clienteService;
         this.usuarioLogado = usuarioLogado;
         this.validade = validade;
         this.versaoMinimaLog = versaoMinimaLog;
+        this.versaoMinimaAcao = versaoMinimaAcao;
     }
 
     /** Se já houver um pedido aberto para o cliente, devolve o mesmo (cliques repetidos não enfileiram vários). */
@@ -84,13 +88,15 @@ public class PedidoConsultaService {
     }
 
     /**
-     * Chamado no polling do agente: entrega o pedido pendente mais antigo, se houver. Agente anterior a
-     * {@code app.monitor.versao-minima-log} só entende a consulta: os pedidos LOG ficam na fila e expiram.
+     * Chamado no polling do agente: entrega o pedido pendente mais antigo que a versão dele entende. Os demais
+     * ficam na fila e expiram: LOG só a partir de {@code app.monitor.versao-minima-log}, START/RESTART só a
+     * partir de {@code app.monitor.versao-minima-acao}.
      */
     @Transactional
     public Optional<PedidoConsulta> entregarProximo(Long clienteId, String versaoAgente) {
-        List<TipoPedido> tipos = aceitaLog(versaoAgente)
-                ? List.of(TipoPedido.CONSULTA, TipoPedido.LOG) : List.of(TipoPedido.CONSULTA);
+        List<TipoPedido> tipos = new ArrayList<>(List.of(TipoPedido.CONSULTA));
+        if (aceitaLog(versaoAgente)) tipos.add(TipoPedido.LOG);
+        if (aceitaAcao(versaoAgente)) tipos.addAll(List.of(TipoPedido.START, TipoPedido.RESTART));
         return repo.findFirstByClienteIdAndStatusAndTipoInAndCriadoEmAfterOrderByIdAsc(
                         clienteId, StatusPedido.PENDENTE, tipos, limiteValidade())
                 .map(pedido -> {
@@ -113,8 +119,21 @@ public class PedidoConsultaService {
 
     /** Versão do agente (ex.: 2.3.0, 2.3.1-beta) >= app.monitor.versao-minima-log. Ausente ou ilegível: não. */
     public boolean aceitaLog(String versaoAgente) {
+        return atende(versaoAgente, versaoMinimaLog);
+    }
+
+    /** Versão do agente >= app.monitor.versao-minima-acao (START/RESTART de container). */
+    public boolean aceitaAcao(String versaoAgente) {
+        return atende(versaoAgente, versaoMinimaAcao);
+    }
+
+    public String versaoMinimaAcao() {
+        return versaoMinimaAcao;
+    }
+
+    private static boolean atende(String versaoAgente, String versaoMinima) {
         int[] versao = numeros(versaoAgente);
-        int[] minima = numeros(versaoMinimaLog);
+        int[] minima = numeros(versaoMinima);
         if (versao == null || minima == null) return false;
         for (int i = 0; i < 3; i++) {
             if (versao[i] != minima[i]) return versao[i] > minima[i];

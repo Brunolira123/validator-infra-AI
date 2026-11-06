@@ -2,12 +2,17 @@ package br.com.vrinteriorpaulista.validator_infra.monitor.controller;
 
 import br.com.vrinteriorpaulista.validator_infra.dto.response.ErroResponse;
 import br.com.vrinteriorpaulista.validator_infra.controller.exception.GlobalExceptionHandler;
+import br.com.vrinteriorpaulista.validator_infra.monitor.dto.AcaoAgenteRequest;
 import br.com.vrinteriorpaulista.validator_infra.monitor.dto.AmbienteAgenteRequest;
 import br.com.vrinteriorpaulista.validator_infra.monitor.dto.LogAgenteRequest;
 import br.com.vrinteriorpaulista.validator_infra.monitor.dto.PedidoAgenteResponse;
 import br.com.vrinteriorpaulista.validator_infra.monitor.dto.ResultadoAgenteRequest;
+import br.com.vrinteriorpaulista.validator_infra.monitor.dto.ResultadoAtualizacaoRequest;
+import br.com.vrinteriorpaulista.validator_infra.monitor.dto.VersaoAlvoResponse;
 import br.com.vrinteriorpaulista.validator_infra.monitor.security.AgenteAutenticado;
+import br.com.vrinteriorpaulista.validator_infra.monitor.service.AcaoContainerService;
 import br.com.vrinteriorpaulista.validator_infra.monitor.service.AgenteService;
+import br.com.vrinteriorpaulista.validator_infra.monitor.service.AtualizacaoAgenteService;
 import br.com.vrinteriorpaulista.validator_infra.monitor.service.LogContainerService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -36,22 +41,28 @@ import java.util.stream.Collectors;
 public class AgenteController {
 
     static final String HEADER_VERSAO = "X-Agente-Versao";
+    static final String HEADER_VERSAO_UPDATER = "X-Updater-Versao";
     private static final String CAMINHO_AMBIENTE = "/ambiente";
     private static final int MAX_CAMPOS_NO_LOG = 10;
     private static final int MAX_MOTIVO_NO_LOG = 300;
 
     private final AgenteService agenteService;
     private final LogContainerService logService;
+    private final AcaoContainerService acaoService;
+    private final AtualizacaoAgenteService atualizacaoService;
     private final GlobalExceptionHandler errosGlobais;
 
     public AgenteController(AgenteService agenteService, LogContainerService logService,
+                            AcaoContainerService acaoService, AtualizacaoAgenteService atualizacaoService,
                             GlobalExceptionHandler errosGlobais) {
         this.agenteService = agenteService;
         this.logService = logService;
+        this.acaoService = acaoService;
+        this.atualizacaoService = atualizacaoService;
         this.errosGlobais = errosGlobais;
     }
 
-    @Operation(summary = "Polling do agente (a cada ~30s)", description = "200 com o pedido pendente; 204 se não houver. Agente 2.3.0+ recebe também tipo (CONSULTA ou LOG), container e linhas; os anteriores só recebem pedidoId e nunca pedidos LOG. Também registra o contato (heartbeat).")
+    @Operation(summary = "Polling do agente (a cada ~30s)", description = "200 com o pedido pendente; 204 se não houver. Agente 2.3.0+ recebe também tipo, container e linhas; os anteriores só recebem pedidoId e nunca pedidos LOG. START/RESTART só vão para o agente 2.4.0+. Também registra o contato (heartbeat).")
     @GetMapping("/pedidos")
     public ResponseEntity<PedidoAgenteResponse> pedidos(@AuthenticationPrincipal AgenteAutenticado agente,
                                                         @RequestHeader(value = HEADER_VERSAO, required = false) String versao) {
@@ -66,6 +77,32 @@ public class AgenteController {
     public void log(@AuthenticationPrincipal AgenteAutenticado agente, @PathVariable Long id,
                     @RequestBody @Valid LogAgenteRequest req) {
         logService.receber(agente, id, req);
+    }
+
+    @Operation(summary = "Envia o resultado de um START/RESTART", description = "ok=true → CONCLUIDO; ok=false → ERRO com o erro informado. 400 se o pedido não for uma ação deste cliente; 409 se já foi respondido.")
+    @PostMapping("/pedidos/{id}/acao")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void acao(@AuthenticationPrincipal AgenteAutenticado agente, @PathVariable Long id,
+                     @RequestBody @Valid AcaoAgenteRequest req) {
+        acaoService.receber(agente, id, req);
+    }
+
+    @Operation(summary = "vrip-updater: há versão do agente para instalar?", description = "200 com versaoAlvo, ou 204 sem pendência (sem alvo, agente já na versão, ou a versão já falhou neste cliente). Registra o contato do updater.")
+    @GetMapping("/atualizacao")
+    public ResponseEntity<VersaoAlvoResponse> atualizacao(@AuthenticationPrincipal AgenteAutenticado agente,
+                                                          @RequestHeader(value = HEADER_VERSAO_UPDATER, required = false) String versaoUpdater) {
+        return atualizacaoService.versaoPendente(agente, versaoUpdater)
+                .map(v -> ResponseEntity.ok(new VersaoAlvoResponse(v)))
+                .orElseGet(() -> ResponseEntity.noContent().build());
+    }
+
+    @Operation(summary = "vrip-updater: resultado da atualização", description = "ATUALIZADO limpa a versão alvo; FALHOU/ROLLBACK mantém o alvo, mas essa versão não é oferecida de novo ao cliente.")
+    @PostMapping("/atualizacao/resultado")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void resultadoAtualizacao(@AuthenticationPrincipal AgenteAutenticado agente,
+                                     @RequestHeader(value = HEADER_VERSAO_UPDATER, required = false) String versaoUpdater,
+                                     @RequestBody @Valid ResultadoAtualizacaoRequest req) {
+        atualizacaoService.receberResultado(agente, versaoUpdater, req);
     }
 
     @Operation(summary = "Envia o resultado de uma execução", description = "Com pedidoId, conclui o \"Consultar agora\" (400 se o pedido não for deste cliente). Execuções AGENDADO geram alerta no Discord.")

@@ -3,8 +3,10 @@ package br.com.vrinteriorpaulista.validator_infra.monitor.service;
 import br.com.vrinteriorpaulista.validator_infra.monitor.dto.SituacaoAgente;
 import br.com.vrinteriorpaulista.validator_infra.monitor.dto.SuporteClienteResponse;
 import br.com.vrinteriorpaulista.validator_infra.monitor.entity.AmbienteCliente;
+import br.com.vrinteriorpaulista.validator_infra.monitor.entity.AtualizacaoAgente;
 import br.com.vrinteriorpaulista.validator_infra.monitor.entity.ClienteMonitorado;
 import br.com.vrinteriorpaulista.validator_infra.monitor.repository.AmbienteClienteRepository;
+import br.com.vrinteriorpaulista.validator_infra.monitor.repository.AtualizacaoAgenteRepository;
 import br.com.vrinteriorpaulista.validator_infra.monitor.repository.ClienteMonitoradoRepository;
 import br.com.vrinteriorpaulista.validator_infra.monitor.repository.ExecucaoRepository;
 import org.springframework.stereotype.Service;
@@ -20,7 +22,7 @@ import java.util.stream.Collectors;
 
 /**
  * Visão da tela de Suporte: um item por cliente ativo, com a situação do agente e o ambiente (containers).
- * Três consultas fixas, sem N+1; os filtros rodam em memória (poucas centenas de clientes).
+ * Quatro consultas fixas, sem N+1; os filtros rodam em memória (poucas centenas de clientes).
  */
 @Service
 public class SuporteMonitorService {
@@ -28,15 +30,18 @@ public class SuporteMonitorService {
     private final ClienteMonitoradoRepository clienteRepo;
     private final ExecucaoRepository execucaoRepo;
     private final AmbienteClienteRepository ambienteRepo;
+    private final AtualizacaoAgenteRepository atualizacaoRepo;
     private final ClienteMonitoradoService clienteService;
 
     public SuporteMonitorService(ClienteMonitoradoRepository clienteRepo,
                                  ExecucaoRepository execucaoRepo,
                                  AmbienteClienteRepository ambienteRepo,
+                                 AtualizacaoAgenteRepository atualizacaoRepo,
                                  ClienteMonitoradoService clienteService) {
         this.clienteRepo = clienteRepo;
         this.execucaoRepo = execucaoRepo;
         this.ambienteRepo = ambienteRepo;
+        this.atualizacaoRepo = atualizacaoRepo;
         this.clienteService = clienteService;
     }
 
@@ -47,13 +52,18 @@ public class SuporteMonitorService {
                 .forEach(v -> versaoBanco.put(v.getClienteId(), v.getVersaoBanco()));
         Map<Long, AmbienteCliente> ambientes = ambienteRepo.findAll().stream()
                 .collect(Collectors.toMap(AmbienteCliente::getId, Function.identity()));
+        Map<Long, AtualizacaoAgente> atualizacoes = atualizacaoRepo.findUltimaDeCadaCliente().stream()
+                .collect(Collectors.toMap(a -> a.getCliente().getId(), Function.identity()));
         String termo = busca == null || busca.isBlank() ? null : normalizar(busca);
 
         return clienteRepo.findByAtivoTrueOrderByNomeAsc().stream()
                 .filter(c -> termo == null || normalizar(c.getNome()).contains(termo))
                 .map(c -> new SuporteClienteResponse(c.getId(), c.getNome(), situacao(c), c.getUltimoContato(),
                         versaoBanco.get(c.getId()), c.getVersaoAgente(),
-                        SuporteClienteResponse.Ambiente.from(ambientes.get(c.getId()))))
+                        SuporteClienteResponse.Ambiente.from(ambientes.get(c.getId())),
+                        c.getVersaoAlvoAgente(), c.getPiloto(),
+                        SuporteClienteResponse.Updater.from(c),
+                        SuporteClienteResponse.UltimaAtualizacao.from(atualizacoes.get(c.getId()))))
                 .filter(r -> !offline || r.situacao() == SituacaoAgente.OFFLINE)
                 .filter(r -> !comParado || (r.ambiente() != null && r.ambiente().parados() > 0))
                 .toList();
