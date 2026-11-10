@@ -1,0 +1,125 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Cronograma de implantação para o cliente (módulo Projetos). Só etapas e datas:
+  nunca horas, custos, divisão por analista nem observações internas.
+-->
+<jasperReport name="cronograma" language="java" pageWidth="595" pageHeight="842" columnWidth="523"
+              leftMargin="36" rightMargin="36" topMargin="30" bottomMargin="30" whenNoDataType="AllSectionsNoDetail">
+	<style name="Base" default="true" fontName="DejaVu Sans" fontSize="9.0" forecolor="#222222"/>
+	<style name="Rotulo" style="Base" fontSize="8.0" forecolor="#667085"/>
+	<style name="Valor" style="Base" fontSize="10.0" bold="true"/>
+	<style name="Linha" style="Base">
+		<conditionalStyle bold="true">
+			<conditionExpression><![CDATA[$F{destaque}]]></conditionExpression>
+		</conditionalStyle>
+	</style>
+	<parameter name="CLIENTE" class="java.lang.String"/>
+	<parameter name="PROJETO" class="java.lang.String"/>
+	<parameter name="INICIO" class="java.lang.String"/>
+	<parameter name="TERMINO" class="java.lang.String"/>
+	<parameter name="DIAS_UTEIS" class="java.lang.Integer"/>
+	<parameter name="EMITIDO_EM" class="java.lang.String"/>
+	<parameter name="TEM_ETAPA_CLIENTE" class="java.lang.Boolean"/>
+	<field name="etapa" class="java.lang.String"/>
+	<field name="quem" class="java.lang.String"/>
+	<field name="inicio" class="java.lang.String"/>
+	<field name="termino" class="java.lang.String"/>
+	<field name="destaque" class="java.lang.Boolean"/>
+	<title height="168">
+		<element kind="rectangle" x="0" y="0" width="523" height="52" mode="Opaque" backcolor="#1F3A5F">
+			<pen lineWidth="0.0"/>
+		</element>
+		<element kind="staticText" x="14" y="9" width="130" height="34" fontSize="24.0" bold="true" forecolor="#FFFFFF" vTextAlign="Middle">
+			<text><![CDATA[VRIP]]></text>
+		</element>
+		<element kind="staticText" x="150" y="9" width="359" height="16" fontSize="9.0" forecolor="#D0D9E6" hTextAlign="Right">
+			<text><![CDATA[VR Software · VR Interior Paulista]]></text>
+		</element>
+		<element kind="staticText" x="150" y="25" width="359" height="20" fontSize="13.0" bold="true" forecolor="#FFFFFF" hTextAlign="Right">
+			<text><![CDATA[Cronograma de implantação]]></text>
+		</element>
+		<element kind="staticText" x="0" y="64" width="80" height="12" style="Rotulo">
+			<text><![CDATA[Cliente]]></text>
+		</element>
+		<element kind="textField" x="0" y="76" width="523" height="16" style="Valor" textAdjust="StretchHeight">
+			<expression><![CDATA[$P{CLIENTE}]]></expression>
+		</element>
+		<element kind="staticText" x="0" y="96" width="80" height="12" style="Rotulo">
+			<text><![CDATA[Projeto]]></text>
+		</element>
+		<element kind="textField" x="0" y="108" width="523" height="16" style="Valor" textAdjust="StretchHeight">
+			<expression><![CDATA[$P{PROJETO}]]></expression>
+		</element>
+		<element kind="staticText" x="0" y="128" width="130" height="12" style="Rotulo">
+			<text><![CDATA[Início previsto]]></text>
+		</element>
+		<element kind="textField" x="0" y="140" width="130" height="16" style="Valor">
+			<expression><![CDATA[$P{INICIO}]]></expression>
+		</element>
+		<element kind="staticText" x="140" y="128" width="130" height="12" style="Rotulo">
+			<text><![CDATA[Término previsto]]></text>
+		</element>
+		<element kind="textField" x="140" y="140" width="130" height="16" style="Valor">
+			<expression><![CDATA[$P{TERMINO}]]></expression>
+		</element>
+		<element kind="staticText" x="280" y="128" width="130" height="12" style="Rotulo">
+			<text><![CDATA[Dias úteis]]></text>
+		</element>
+		<element kind="textField" x="280" y="140" width="130" height="16" style="Valor">
+			<expression><![CDATA[$P{DIAS_UTEIS}]]></expression>
+		</element>
+	</title>
+	<columnHeader height="22">
+		<element kind="rectangle" x="0" y="0" width="523" height="22" mode="Opaque" backcolor="#EEF2F7">
+			<pen lineWidth="0.0"/>
+		</element>
+		<element kind="staticText" x="6" y="0" width="251" height="22" bold="true" vTextAlign="Middle">
+			<text><![CDATA[Etapa]]></text>
+		</element>
+		<element kind="staticText" x="261" y="0" width="130" height="22" bold="true" vTextAlign="Middle">
+			<text><![CDATA[Quem]]></text>
+		</element>
+		<element kind="staticText" x="395" y="0" width="62" height="22" bold="true" vTextAlign="Middle">
+			<text><![CDATA[Início]]></text>
+		</element>
+		<element kind="staticText" x="459" y="0" width="62" height="22" bold="true" vTextAlign="Middle">
+			<text><![CDATA[Término]]></text>
+		</element>
+	</columnHeader>
+	<detail>
+		<band height="18">
+			<element kind="textField" x="6" y="2" width="251" height="14" style="Linha" textAdjust="StretchHeight">
+				<expression><![CDATA[$F{etapa}]]></expression>
+			</element>
+			<element kind="textField" x="261" y="2" width="130" height="14" style="Linha" textAdjust="StretchHeight">
+				<expression><![CDATA[$F{quem}]]></expression>
+			</element>
+			<element kind="textField" x="395" y="2" width="62" height="14" style="Linha">
+				<expression><![CDATA[$F{inicio}]]></expression>
+			</element>
+			<element kind="textField" x="459" y="2" width="62" height="14" style="Linha">
+				<expression><![CDATA[$F{termino}]]></expression>
+			</element>
+			<element kind="line" x="0" y="17" width="523" height="1" positionType="Float">
+				<pen lineWidth="0.5" lineColor="#D0D5DD"/>
+			</element>
+		</band>
+	</detail>
+	<pageFooter height="22">
+		<element kind="textField" x="0" y="6" width="400" height="14" style="Rotulo">
+			<expression><![CDATA["Emitido em " + $P{EMITIDO_EM} + ". Datas previstas, sujeitas a ajuste."]]></expression>
+		</element>
+		<element kind="textField" x="400" y="6" width="95" height="14" style="Rotulo" hTextAlign="Right">
+			<expression><![CDATA["Página " + $V{PAGE_NUMBER}]]></expression>
+		</element>
+		<element kind="textField" x="495" y="6" width="28" height="14" style="Rotulo" evaluationTime="Report">
+			<expression><![CDATA[" de " + $V{PAGE_NUMBER}]]></expression>
+		</element>
+	</pageFooter>
+	<summary height="34">
+		<element kind="textField" x="0" y="10" width="523" height="20" style="Base" fontSize="8.5" bold="true" textAdjust="StretchHeight">
+			<printWhenExpression><![CDATA[$P{TEM_ETAPA_CLIENTE}]]></printWhenExpression>
+			<expression><![CDATA["Etapas em negrito são do cliente: atrasos nelas deslocam as etapas seguintes."]]></expression>
+		</element>
+	</summary>
+</jasperReport>

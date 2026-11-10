@@ -427,6 +427,112 @@ class ProjetosIntegrationTest {
     }
 
     @Test
+    void cronogramaPdfTemEtapasEDatasMasNuncaHorasCustosAnalistasNemObservacoes() throws Exception {
+        Usuario ana = usuario("PROJETOS");
+        Usuario bia = usuario("PROJETOS");
+        long clienteId = cliente("Limeira");
+        long planejamentoId = planejamento(clienteId);
+        mockMvc.perform(put("/api/projetos/planejamentos/{id}", planejamentoId)
+                        .header(HttpHeaders.AUTHORIZATION, projetos)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"nome":"Implantação Matriz","kickoff":"%s","horasContratadas":321.5,
+                                 "custoHoraServico":137.45,"custoHoraViagem":89.9,"responsavelId":%d,
+                                 "observacao":"Margem interna apertada, não comentar com o cliente"}
+                                """.formatted(SEGUNDA, ana.id())))
+                .andExpect(status().isOk());
+        long conversao = atividade(planejamentoId, "Conversão de banco", "7.25", ana.id());
+        mockMvc.perform(put("/api/projetos/planejamentos/{id}/atividades/{a}/distribuicao", planejamentoId, conversao)
+                        .header(HttpHeaders.AUTHORIZATION, projetos)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("[{\"usuarioId\":" + ana.id() + ",\"horas\":3.25},{\"usuarioId\":" + bia.id() + ",\"horas\":4}]"))
+                .andExpect(status().isOk());
+        long conferencia = idDe(atividadeRequest(planejamentoId,
+                "{\"nome\":\"Cliente confere os dados\",\"doCliente\":true,\"diasCliente\":2}")
+                .andExpect(status().isCreated()));
+        mockMvc.perform(put("/api/projetos/planejamentos/{id}/atividades/{a}/dependencias", planejamentoId, conferencia)
+                        .header(HttpHeaders.AUTHORIZATION, projetos)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"dependeDe\":[" + conversao + "]}"))
+                .andExpect(status().isOk());
+        mockMvc.perform(post("/api/projetos/planejamentos/{id}/deslocamentos", planejamentoId)
+                        .header(HttpHeaders.AUTHORIZATION, projetos)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"usuarioId\":" + ana.id() + ",\"data\":\"" + SEGUNDA + "\",\"horas\":2.5,\"descricao\":\"Ida\"}"))
+                .andExpect(status().isCreated());
+        calcular(planejamentoId).andExpect(status().isOk());
+
+        byte[] pdf = mockMvc.perform(get("/api/projetos/planejamentos/{id}/cronograma.pdf", planejamentoId)
+                        .header(HttpHeaders.AUTHORIZATION, projetos))
+                .andExpect(status().isOk())
+                .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.content()
+                        .contentType(MediaType.APPLICATION_PDF))
+                .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.header()
+                        .string(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"cronograma-implantacao-matriz.pdf\""))
+                .andReturn().getResponse().getContentAsByteArray();
+
+        String texto = textoDoPdf(pdf);
+        // Segunda: Ana tem 2,5h de viagem (5,5h livres), Bia 4h; a conversão termina segunda e o cliente confere ter/qua
+        assertThat(texto).contains("Mercado Teste Ltda", "Implantação Matriz", "Conversão de banco",
+                "Cliente confere os dados", "23/11/2026", "25/11/2026", "VR",
+                "atrasos nelas deslocam as etapas seguintes");
+        assertThat(texto).doesNotContain("137", "89,9", "89.9", "321", "7,25", "7.25", "3,25", "3.25", "2,5", "2.5",
+                "R$", "Margem interna", ana.nome(), bia.nome());
+        assertThat(texto.toLowerCase()).doesNotContain("custo", "hora");
+        assertThat(texto).doesNotContainPattern("\\d+([,.]\\d+)?\\s?h\\b");
+
+        // Só gerar não muda a situação
+        mockMvc.perform(get("/api/projetos/planejamentos/{id}", planejamentoId).header(HttpHeaders.AUTHORIZATION, projetos))
+                .andExpect(jsonPath("$.situacao").value("RASCUNHO"));
+    }
+
+    @Test
+    void cronogramaPdfExigeCalculoEmDia() throws Exception {
+        Usuario ana = usuario("PROJETOS");
+        long planejamentoId = planejamento(cliente("Limeira"));
+        long atividadeId = atividade(planejamentoId, "Treinamento", "8", ana.id());
+
+        cronograma(planejamentoId, false).andExpect(status().isConflict())
+                .andExpect(jsonPath("$.mensagem").value("Calcule o planejamento antes de gerar o cronograma"));
+        calcular(planejamentoId).andExpect(status().isOk());
+        cronograma(planejamentoId, false).andExpect(status().isOk());
+
+        responsavel(planejamentoId, atividadeId, "Treinamento", null, "12", ana.id());
+        cronograma(planejamentoId, false).andExpect(status().isConflict())
+                .andExpect(jsonPath("$.mensagem").value("O cálculo está desatualizado: recalcule antes de gerar o cronograma"));
+    }
+
+    @Test
+    void cronogramaPdfComMarcarEnviadoPassaParaEnviado() throws Exception {
+        Usuario ana = usuario("PROJETOS");
+        long planejamentoId = planejamento(cliente("Limeira"));
+        atividade(planejamentoId, "Kickoff", "2", ana.id());
+        calcular(planejamentoId).andExpect(status().isOk());
+
+        // RASCUNHO não vai direto para ENVIADO
+        cronograma(planejamentoId, true).andExpect(status().isConflict());
+        situacao(planejamentoId, "EM_PLANEJAMENTO").andExpect(status().isOk());
+
+        String comercial = usuario("COMERCIAL").token();
+        mockMvc.perform(get("/api/projetos/planejamentos/{id}/cronograma.pdf", planejamentoId)
+                        .param("marcarEnviado", "true").header(HttpHeaders.AUTHORIZATION, comercial))
+                .andExpect(status().isForbidden());
+        mockMvc.perform(get("/api/projetos/planejamentos/{id}/cronograma.pdf", planejamentoId)
+                        .header(HttpHeaders.AUTHORIZATION, comercial))
+                .andExpect(status().isNotFound());
+        mockMvc.perform(get("/api/projetos/planejamentos/{id}/cronograma.pdf", planejamentoId)
+                        .header(HttpHeaders.AUTHORIZATION, usuario("TECNICO").token()))
+                .andExpect(status().isForbidden());
+
+        cronograma(planejamentoId, true).andExpect(status().isOk());
+        mockMvc.perform(get("/api/projetos/planejamentos/{id}", planejamentoId).header(HttpHeaders.AUTHORIZATION, projetos))
+                .andExpect(jsonPath("$.situacao").value("ENVIADO"))
+                .andExpect(jsonPath("$.calculoDesatualizado").value(false));
+        // Gerar de novo já ENVIADO continua 200
+        cronograma(planejamentoId, true).andExpect(status().isOk());
+    }
+
+    @Test
     void bancoTemChecksDosEnumsDoModulo() {
         List<String> restricoes = jdbc.queryForList("""
                 select pg_get_constraintdef(c.oid) from pg_constraint c
@@ -450,6 +556,26 @@ class ProjetosIntegrationTest {
                 .header(HttpHeaders.AUTHORIZATION, projetos)
                 .contentType(MediaType.APPLICATION_JSON)
                 .content("{\"situacao\":\"" + situacao + "\"}"));
+    }
+
+    private ResultActions cronograma(long planejamentoId, boolean marcarEnviado) throws Exception {
+        return mockMvc.perform(get("/api/projetos/planejamentos/{id}/cronograma.pdf", planejamentoId)
+                .param("marcarEnviado", String.valueOf(marcarEnviado))
+                .header(HttpHeaders.AUTHORIZATION, projetos));
+    }
+
+    private static String textoDoPdf(byte[] pdf) throws java.io.IOException {
+        com.lowagie.text.pdf.PdfReader leitor = new com.lowagie.text.pdf.PdfReader(pdf);
+        try {
+            com.lowagie.text.pdf.parser.PdfTextExtractor extrator = new com.lowagie.text.pdf.parser.PdfTextExtractor(leitor);
+            StringBuilder sb = new StringBuilder();
+            for (int pagina = 1; pagina <= leitor.getNumberOfPages(); pagina++) {
+                sb.append(extrator.getTextFromPage(pagina)).append('\n');
+            }
+            return sb.toString();
+        } finally {
+            leitor.close();
+        }
     }
 
     private ResultActions aplicar(long planejamentoId, long templateId) throws Exception {

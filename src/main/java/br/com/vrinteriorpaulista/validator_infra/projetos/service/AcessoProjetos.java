@@ -31,6 +31,11 @@ public class AcessoProjetos {
         this.usuarioLogado = usuarioLogado;
     }
 
+    /** PROJETOS, ADMIN ou DIRETORIA. */
+    public boolean editor() {
+        return EDITORES.contains(usuarioLogado.atual().perfil());
+    }
+
     /** null = todos os clientes. */
     public Set<Long> clientesVisiveis() {
         UsuarioAutenticado atual = usuarioLogado.atual();

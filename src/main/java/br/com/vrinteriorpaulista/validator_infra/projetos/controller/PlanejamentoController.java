@@ -3,6 +3,7 @@ package br.com.vrinteriorpaulista.validator_infra.projetos.controller;
 import br.com.vrinteriorpaulista.validator_infra.projetos.dto.*;
 import br.com.vrinteriorpaulista.validator_infra.projetos.entity.SituacaoPlanejamento;
 import br.com.vrinteriorpaulista.validator_infra.projetos.service.CalculoPlanejamentoService;
+import br.com.vrinteriorpaulista.validator_infra.projetos.service.CronogramaPdfService;
 import br.com.vrinteriorpaulista.validator_infra.projetos.service.PlanejamentoService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -10,7 +11,10 @@ import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
 import org.springframework.format.annotation.DateTimeFormat;
+import org.springframework.http.ContentDisposition;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
@@ -32,10 +36,13 @@ public class PlanejamentoController {
 
     private final PlanejamentoService service;
     private final CalculoPlanejamentoService calculos;
+    private final CronogramaPdfService cronogramas;
 
-    public PlanejamentoController(PlanejamentoService service, CalculoPlanejamentoService calculos) {
+    public PlanejamentoController(PlanejamentoService service, CalculoPlanejamentoService calculos,
+                                  CronogramaPdfService cronogramas) {
         this.service = service;
         this.calculos = calculos;
+        this.cronogramas = cronogramas;
     }
 
     @Operation(summary = "Lista os planejamentos",
@@ -113,6 +120,22 @@ public class PlanejamentoController {
     @PostMapping("/planejamentos/{id}/calcular")
     public CalculoResponse calcular(@PathVariable Long id) {
         return calculos.calcular(id);
+    }
+
+    @Operation(summary = "PDF do cronograma para o cliente",
+            description = "Etapas, quem faz (VR ou o cliente) e datas do último cálculo; etapas do cliente em negrito. "
+                    + "Nunca leva horas, custos, analistas nem observações internas. 409 sem cálculo ou com cálculo "
+                    + "desatualizado. marcarEnviado=true passa a situação para ENVIADO (só PROJETOS/ADMIN/DIRETORIA, "
+                    + "a partir de EM_PLANEJAMENTO; senão 403/409).")
+    @GetMapping("/planejamentos/{id}/cronograma.pdf")
+    public ResponseEntity<byte[]> cronogramaPdf(@PathVariable Long id,
+                                                @RequestParam(defaultValue = "false") boolean marcarEnviado) {
+        CronogramaPdfService.Pdf pdf = cronogramas.gerar(id, marcarEnviado);
+        return ResponseEntity.ok()
+                .contentType(MediaType.APPLICATION_PDF)
+                .header(HttpHeaders.CONTENT_DISPOSITION,
+                        ContentDisposition.attachment().filename(pdf.nomeArquivo()).build().toString())
+                .body(pdf.conteudo());
     }
 
     // ----- atividades -----
