@@ -22,6 +22,7 @@ import br.com.vrinteriorpaulista.validator_infra.util.CnpjUtils;
 import jakarta.persistence.EntityNotFoundException;
 import jakarta.persistence.criteria.Predicate;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
@@ -63,6 +64,7 @@ public class ProspectService {
     private final ProspeccaoService prospeccao;
     private final UsuarioLogadoService usuarioLogado;
     private final TransactionTemplate tx;
+    private final ApplicationEventPublisher eventos;
 
     public ProspectService(ProspectRepository repo,
                            VisitaProspectRepository visitaRepo,
@@ -71,7 +73,8 @@ public class ProspectService {
                            LevantamentoService levantamentoService,
                            ProspeccaoService prospeccao,
                            UsuarioLogadoService usuarioLogado,
-                           TransactionTemplate tx) {
+                           TransactionTemplate tx,
+                           ApplicationEventPublisher eventos) {
         this.repo = repo;
         this.visitaRepo = visitaRepo;
         this.clienteRepo = clienteRepo;
@@ -80,6 +83,7 @@ public class ProspectService {
         this.prospeccao = prospeccao;
         this.usuarioLogado = usuarioLogado;
         this.tx = tx;
+        this.eventos = eventos;
     }
 
     /** Resultado do salvar: o front recebe 201 quando criou e 200 quando o lugar já era prospect. */
@@ -355,7 +359,10 @@ public class ProspectService {
         return ProspectResponse.from(repo.save(p), null);
     }
 
-    /** Levantamento do cliente fechado. As regras de Levantamento ficam no service dele. */
+    /**
+     * Levantamento do cliente fechado. As regras de Levantamento ficam no service dele.
+     * Depois do commit, o módulo Projetos cria o planejamento RASCUNHO do cliente (LtoRealizadoEvent).
+     */
     @Transactional
     public LtoProspectResponse lto(Long id, LtoProspectRequest req) {
         Prospect p = buscarVisivel(id);
@@ -375,6 +382,7 @@ public class ProspectService {
 
         p.setStatus(StatusProspect.LTO);
         repo.save(p);
+        eventos.publishEvent(new LtoRealizadoEvent(p.getId(), cliente.getId(), levantamento.getId()));
         log.info("Prospect {} virou LTO: cliente {}, levantamento {}", id, cliente.getId(), levantamento.getId());
         return new LtoProspectResponse(cliente.getId(), levantamento.getId());
     }

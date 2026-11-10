@@ -16,6 +16,7 @@ import br.com.vrinteriorpaulista.validator_infra.service.UsuarioLogadoService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.support.TransactionTemplate;
 
@@ -51,7 +52,8 @@ class ProspectServiceTest {
 
         service = new ProspectService(repo, mock(VisitaProspectRepository.class), mock(ClienteRepository.class),
                 mock(ClienteService.class), mock(LevantamentoService.class), mock(ProspeccaoService.class),
-                usuarioLogado, new TransactionTemplate(mock(PlatformTransactionManager.class)));
+                usuarioLogado, new TransactionTemplate(mock(PlatformTransactionManager.class)),
+                mock(ApplicationEventPublisher.class));
     }
 
     @Test
