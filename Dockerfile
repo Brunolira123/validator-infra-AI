@@ -23,6 +23,9 @@ RUN addgroup -S app \
 
 COPY --from=build --chown=app:app /build/app.jar app.jar
 
+# Fontes e renderização para o JasperReports (PDF do cronograma) no Alpine
+RUN apk add --no-cache fontconfig freetype
+
 USER app
 
 ENV FOTOS_PATH=/app/storage/fotos \
