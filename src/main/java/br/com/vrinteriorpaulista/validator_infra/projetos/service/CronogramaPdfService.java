@@ -26,15 +26,15 @@ import java.util.function.Function;
 import java.util.stream.Collectors;
 
 /**
- * PDF do cronograma para o cliente, a partir do último cálculo (que precisa estar em dia). Leva só etapas, quem
- * faz (VR ou o cliente) e datas: nunca horas, custos, analistas nem observações internas. Essa filtragem é feita
+ * PDF do cronograma para o cliente, sobre o timbrado oficial, a partir do último cálculo (que precisa estar em dia).
+ * Leva só etapas, responsável (VR Software ou o cliente) e datas: nunca horas, custos, analistas nem observações internas. Essa filtragem é feita
  * aqui, nas linhas que vão para o relatório.
  */
 @Service
 @Slf4j
 public class CronogramaPdfService {
 
-    static final String VR = "VR";
+    static final String VR = "VR Software";
     private static final DateTimeFormatter DATA = DateTimeFormatter.ofPattern("dd/MM/yyyy");
     private static final Comparator<PlanejamentoAtividade> ORDEM =
             Comparator.comparing(PlanejamentoAtividade::getOrdem).thenComparing(PlanejamentoAtividade::getId);

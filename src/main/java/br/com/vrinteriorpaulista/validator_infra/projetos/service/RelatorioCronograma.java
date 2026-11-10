@@ -19,7 +19,7 @@ import java.util.Locale;
 import java.util.Map;
 
 /**
- * Preenche o relatorios/cronograma.jrxml e exporta em PDF. O relatório é compilado uma vez, no primeiro uso.
+ * Preenche o relatorios/cronograma.jrxml (sobre o timbrado relatorios/timbrado-confidencial.jpg) e exporta em PDF. O relatório é compilado uma vez, no primeiro uso.
  * Recebe só o que pode ir para o cliente: quem monta as linhas decide o conteúdo.
  */
 @Component
@@ -37,6 +37,15 @@ public class RelatorioCronograma {
     public record Linha(String etapa, String quem, String inicio, String termino, boolean destaque) {}
 
     public byte[] gerar(Cabecalho cabecalho, List<Linha> linhas) {
+        try {
+            return JasperExportManager.exportReportToPdf(preencher(cabecalho, linhas));
+        } catch (JRException e) {
+            throw new FalhaNoRelatorio("Falha ao gerar o PDF do cronograma", e);
+        }
+    }
+
+    /** Páginas prontas, antes de exportar (os testes conferem a posição dos elementos). */
+    JasperPrint preencher(Cabecalho cabecalho, List<Linha> linhas) {
         Map<String, Object> parametros = new HashMap<>();
         parametros.put("CLIENTE", cabecalho.cliente());
         parametros.put("PROJETO", cabecalho.projeto());
@@ -56,11 +65,9 @@ public class RelatorioCronograma {
                         "destaque", l.destaque()))
                 .toList();
         try {
-            JasperPrint impresso = JasperFillManager.fillReport(relatorio(), parametros,
-                    new JRMapCollectionDataSource(registros));
-            return JasperExportManager.exportReportToPdf(impresso);
+            return JasperFillManager.fillReport(relatorio(), parametros, new JRMapCollectionDataSource(registros));
         } catch (JRException e) {
-            throw new FalhaNoRelatorio("Falha ao gerar o PDF do cronograma", e);
+            throw new FalhaNoRelatorio("Falha ao preencher o cronograma", e);
         }
     }
 
