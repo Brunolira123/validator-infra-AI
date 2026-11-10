@@ -78,7 +78,14 @@ class RelatorioCronogramaTest {
 
         String texto = texto(relatorio.gerar(cabecalho(true), linhas));
         String segunda = texto.substring(texto.indexOf("Página 2"));
-        assertThat(texto).contains("Etapa 01 ", "Etapa 40 ", "Página 1 de " + impresso.getPages().size());
+        assertThat(texto).contains("Etapa 01 ", "Etapa 40 ", "Página 1 de " + impresso.getPages().size(),
+                "Página 2 de " + impresso.getPages().size());
+        // Número da página na margem esquerda, longe dos losangos do canto inferior direito do timbrado
+        for (JRPrintPage pagina : impresso.getPages()) {
+            assertThat(pagina.getElements()).filteredOn(e -> e instanceof net.sf.jasperreports.engine.JRPrintText t
+                            && t.getFullText() != null && t.getFullText().startsWith("Página "))
+                    .singleElement().satisfies(e -> assertThat(e.getX()).isEqualTo(ESQUERDA));
+        }
         // Cabeçalho da tabela repete na página seguinte
         assertThat(texto.split("Responsável", -1)).hasSize(impresso.getPages().size() + 1);
         assertThat(segunda).isNotEmpty();

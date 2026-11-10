@@ -30,6 +30,9 @@
 	<field name="inicio" class="java.lang.String"/>
 	<field name="termino" class="java.lang.String"/>
 	<field name="destaque" class="java.lang.Boolean"/>
+	<variable name="PAGINA" resetType="Page" class="java.lang.Integer">
+		<expression><![CDATA[$V{PAGE_NUMBER}]]></expression>
+	</variable>
 	<background height="842">
 		<element kind="image" x="0" y="0" width="595" height="842" scaleImage="FillFrame" hImageAlign="Center" vImageAlign="Middle">
 			<expression><![CDATA["relatorios/timbrado-confidencial.jpg"]]></expression>
@@ -108,11 +111,10 @@
 		</band>
 	</detail>
 	<columnFooter height="18">
-		<element kind="textField" x="355" y="4" width="170" height="12" style="Rotulo" hTextAlign="Right">
-			<expression><![CDATA["Página " + $V{PAGE_NUMBER}]]></expression>
-		</element>
-		<element kind="textField" x="525" y="4" width="30" height="12" style="Rotulo" evaluationTime="Report">
-			<expression><![CDATA[" de " + $V{PAGE_NUMBER}]]></expression>
+		<!-- À esquerda, longe dos losangos do canto inferior direito do timbrado. Em Auto, cada variável sai no seu
+		     tempo de reset: PAGINA no fim da página, PAGE_NUMBER (total) no fim do relatório. -->
+		<element kind="textField" x="40" y="4" width="200" height="12" style="Rotulo" evaluationTime="Auto">
+			<expression><![CDATA["Página " + $V{PAGINA} + " de " + $V{PAGE_NUMBER}]]></expression>
 		</element>
 	</columnFooter>
 	<pageFooter height="90"/>
