@@ -97,6 +97,9 @@ public class AtualizacaoAgenteService {
     @Transactional
     public void definirVersaoAlvo(Long clienteId, String versao) {
         ClienteMonitorado cliente = clienteService.buscar(clienteId);
+        if (!cliente.getAtivo() && versao != null && !versao.isBlank()) {
+            throw new IllegalStateException("Cliente monitorado desativado: reative antes de definir a versão alvo");
+        }
         cliente.setVersaoAlvoAgente(vazioComoNulo(versao));
         log.info("Versão alvo do agente do cliente monitorado {} ({}) definida como {} por {}",
                 cliente.getId(), cliente.getNome(), cliente.getVersaoAlvoAgente(), login());

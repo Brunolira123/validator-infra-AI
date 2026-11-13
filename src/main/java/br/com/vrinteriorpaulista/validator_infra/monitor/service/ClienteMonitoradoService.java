@@ -1,5 +1,6 @@
 package br.com.vrinteriorpaulista.validator_infra.monitor.service;
 
+import br.com.vrinteriorpaulista.validator_infra.entity.Usuario;
 import br.com.vrinteriorpaulista.validator_infra.monitor.dto.ClienteMonitoradoDetalheResponse;
 import br.com.vrinteriorpaulista.validator_infra.monitor.dto.ClienteMonitoradoRequest;
 import br.com.vrinteriorpaulista.validator_infra.monitor.dto.ClienteMonitoradoResponse;
@@ -10,7 +11,9 @@ import br.com.vrinteriorpaulista.validator_infra.monitor.entity.ClienteMonitorad
 import br.com.vrinteriorpaulista.validator_infra.monitor.entity.Execucao;
 import br.com.vrinteriorpaulista.validator_infra.monitor.repository.ClienteMonitoradoRepository;
 import br.com.vrinteriorpaulista.validator_infra.monitor.repository.ExecucaoRepository;
+import br.com.vrinteriorpaulista.validator_infra.monitor.repository.PedidoConsultaRepository;
 import br.com.vrinteriorpaulista.validator_infra.monitor.security.TokenAgente;
+import br.com.vrinteriorpaulista.validator_infra.service.UsuarioLogadoService;
 import br.com.vrinteriorpaulista.validator_infra.util.CnpjUtils;
 import jakarta.persistence.EntityNotFoundException;
 import lombok.extern.slf4j.Slf4j;
@@ -30,13 +33,19 @@ public class ClienteMonitoradoService {
 
     private final ClienteMonitoradoRepository repo;
     private final ExecucaoRepository execucaoRepo;
+    private final PedidoConsultaRepository pedidoRepo;
+    private final UsuarioLogadoService usuarioLogado;
     private final Duration offlineApos;
 
     public ClienteMonitoradoService(ClienteMonitoradoRepository repo,
                                     ExecucaoRepository execucaoRepo,
+                                    PedidoConsultaRepository pedidoRepo,
+                                    UsuarioLogadoService usuarioLogado,
                                     @Value("${app.monitor.offline-apos:PT2H}") Duration offlineApos) {
         this.repo = repo;
         this.execucaoRepo = execucaoRepo;
+        this.pedidoRepo = pedidoRepo;
+        this.usuarioLogado = usuarioLogado;
         this.offlineApos = offlineApos;
     }
 
@@ -65,11 +74,49 @@ public class ClienteMonitoradoService {
         return new TokenAgenteResponse(resumo(c, ultimaExecucao(id)), token);
     }
 
-    @Transactional(readOnly = true)
-    public List<ClienteMonitoradoResponse> listar() {
-        return repo.findAllByOrderByNomeAsc().stream()
-                .map(c -> resumo(c, ultimaExecucao(c.getId())))
-                .toList();
+    /**
+     * Revoga o token (o agente e o vrip-updater passam a receber 401), expira os pedidos abertos e cancela a
+     * atualização pendente. O histórico fica intacto.
+     */
+    @Transactional
+    public void desativar(Long id, String motivo) {
+        ClienteMonitorado c = buscar(id);
+        if (!c.getAtivo()) {
+            throw new IllegalStateException("Cliente monitorado já está desativado");
+        }
+        Usuario usuario = usuarioLogado.usuario();
+
+        c.setAtivo(false);
+        c.setTokenHash(TokenAgente.hash(TokenAgente.gerar()));
+        c.setVersaoAlvoAgente(null);
+        c.setAlertaOfflineEnviado(false);
+        c.setDesativadoEm(Instant.now());
+        c.setDesativadoPor(usuario);
+        c.setMotivoDesativacao(motivo == null || motivo.isBlank() ? null : motivo.trim());
+        int expirados = pedidoRepo.expirarAbertos(id);
+
+        log.info("Cliente monitorado {} ({}) desativado por {} em {}; motivo: {}; {} pedido(s) aberto(s) expirado(s)",
+                c.getId(), c.getNome(), usuario.getLogin(), c.getDesativadoEm(),
+                c.getMotivoDesativacao() != null ? c.getMotivoDesativacao() : "(não informado)", expirados);
+    }
+
+    /** Devolve um token novo: o anterior à desativação continua revogado. */
+    @Transactional
+    public TokenAgenteResponse reativar(Long id) {
+        ClienteMonitorado c = buscar(id);
+        if (c.getAtivo()) {
+            throw new IllegalStateException("Cliente monitorado já está ativo");
+        }
+        String token = TokenAgente.gerar();
+        c.setTokenHash(TokenAgente.hash(token));
+        c.setAtivo(true);
+        c.setDesativadoEm(null);
+        c.setDesativadoPor(null);
+        c.setMotivoDesativacao(null);
+
+        log.info("Cliente monitorado {} ({}) reativado por {} com token novo", c.getId(), c.getNome(),
+                usuarioLogado.usuario().getLogin());
+        return new TokenAgenteResponse(resumo(c, ultimaExecucao(id)), token);
     }
 
     @Transactional(readOnly = true)
@@ -104,7 +151,7 @@ public class ClienteMonitoradoService {
     private ClienteMonitoradoResponse resumo(ClienteMonitorado c, Execucao ultima) {
         return new ClienteMonitoradoResponse(
                 c.getId(), c.getNome(), c.getCnpj(), c.getAtivo(),
-                situacao(c, ultima),
+                situacao(c, ultima != null ? ultima.getOk() : null),
                 c.getUltimoContato(), c.getVersaoAgente(),
                 ultima != null ? ultima.getRecebidoEm() : null,
                 ultima != null ? ultima.totalLojas() : 0,
@@ -125,10 +172,11 @@ public class ClienteMonitoradoService {
         return c.getAtivo() && c.getUltimoContato() != null && !semContato(c);
     }
 
-    private SituacaoCliente situacao(ClienteMonitorado c, Execucao ultima) {
+    /** okUltimaExecucao null = o agente nunca enviou resultado. */
+    public SituacaoCliente situacao(ClienteMonitorado c, Boolean okUltimaExecucao) {
         if (!c.getAtivo()) return SituacaoCliente.INATIVO;
         if (semContato(c)) return SituacaoCliente.OFFLINE;
-        if (ultima == null) return SituacaoCliente.AGUARDANDO;
-        return ultima.getOk() ? SituacaoCliente.OK : SituacaoCliente.FALHA;
+        if (okUltimaExecucao == null) return SituacaoCliente.AGUARDANDO;
+        return okUltimaExecucao ? SituacaoCliente.OK : SituacaoCliente.FALHA;
     }
 }

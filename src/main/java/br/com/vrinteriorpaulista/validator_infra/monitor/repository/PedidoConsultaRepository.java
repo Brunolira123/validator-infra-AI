@@ -27,6 +27,16 @@ public interface PedidoConsultaRepository extends JpaRepository<PedidoConsulta, 
     Optional<PedidoConsulta> findFirstByClienteIdAndStatusAndTipoInAndCriadoEmAfterOrderByIdAsc(
             Long clienteId, StatusPedido status, Collection<TipoPedido> tipos, Instant criadoDepoisDe);
 
+    /** Cliente desativado: o que estava na fila não vai mais ser atendido. */
+    @Modifying
+    @Query("""
+            update PedidoConsulta p set p.status = br.com.vrinteriorpaulista.validator_infra.monitor.entity.StatusPedido.EXPIRADO
+            where p.cliente.id = :clienteId
+              and p.status in (br.com.vrinteriorpaulista.validator_infra.monitor.entity.StatusPedido.PENDENTE,
+                               br.com.vrinteriorpaulista.validator_infra.monitor.entity.StatusPedido.ENTREGUE)
+            """)
+    int expirarAbertos(Long clienteId);
+
     @Modifying
     @Query("""
             update PedidoConsulta p set p.texto = null, p.textoApagadoEm = :agora

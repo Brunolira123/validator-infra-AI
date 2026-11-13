@@ -74,7 +74,7 @@ public class SuporteMonitorService {
         return clienteService.online(c) ? SituacaoAgente.ONLINE : SituacaoAgente.OFFLINE;
     }
 
-    private static String normalizar(String texto) {
+    static String normalizar(String texto) {
         return Normalizer.normalize(texto.trim(), Normalizer.Form.NFD)
                 .replaceAll("\\p{M}", "")
                 .toLowerCase(Locale.ROOT);

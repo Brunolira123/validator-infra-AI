@@ -1,5 +1,6 @@
 package br.com.vrinteriorpaulista.validator_infra.monitor.entity;
 
+import br.com.vrinteriorpaulista.validator_infra.entity.Usuario;
 import jakarta.persistence.*;
 import lombok.Getter;
 import lombok.Setter;
@@ -64,6 +65,18 @@ public class ClienteMonitorado {
     /** Já avisou no Discord que o agente está offline: no próximo contato sai o aviso de que voltou. */
     @Column(name = "alerta_offline_enviado", nullable = false)
     private Boolean alertaOfflineEnviado = false;
+
+    // ---- Desativação (cliente que saiu da base ou parou de usar o agente). Null enquanto ativo. ----
+
+    @Column(name = "desativado_em")
+    private Instant desativadoEm;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "desativado_por_id")
+    private Usuario desativadoPor;
+
+    @Column(name = "motivo_desativacao", length = 300)
+    private String motivoDesativacao;
 
     @Column(name = "criado_em", nullable = false, updatable = false)
     private Instant criadoEm;
